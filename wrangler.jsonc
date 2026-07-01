@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "personal-website",
+  "name": "mws",
   "main": ".open-next/worker.js",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -11,6 +11,16 @@
   "observability": {
     "enabled": true
   },
+  "routes": [
+    {
+      "pattern": "matthewschuppel.com/*",
+      "zone_name": "matthewschuppel.com"
+    },
+    {
+      "pattern": "www.matthewschuppel.com/*",
+      "zone_name": "matthewschuppel.com"
+    }
+  ],
   "vars": {
     "NEXT_PUBLIC_SITE_URL": "https://matthewschuppel.com"
   }
