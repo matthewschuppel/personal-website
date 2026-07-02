@@ -4,6 +4,7 @@ import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
+  CalendarDays,
   Check,
   Command,
   FilePlus2,
@@ -36,7 +37,6 @@ import {
   type FeatureSection,
   type MockBookmark,
   type MockDocument,
-  type MockEvent,
   type MockNote,
   type MockProject,
   type MockResource,
@@ -65,6 +65,28 @@ type WeatherState = {
     windSpeed: string;
   };
   source: string;
+};
+
+type DashboardCalendarEvent = {
+  id: string;
+  title: string;
+  time: string;
+  calendar: "Apple Calendar" | "Personal" | "Work" | "Home" | "Wedding";
+  location?: string;
+  startsAt?: string;
+};
+
+type CalendarResponse = {
+  configured: boolean;
+  events: Array<{
+    id: string;
+    title: string;
+    startsAt: string;
+    endsAt: string | null;
+    location: string;
+  }>;
+  refreshedAt?: string;
+  error?: string;
 };
 
 const composerLabels: Record<ComposerMode, string> = {
@@ -101,6 +123,21 @@ function getDateLabel() {
     day: "numeric",
     year: "numeric"
   }).format(new Date());
+}
+
+function formatCalendarTime(startsAt: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(new Date(startsAt));
+}
+
+function getDefaultEvents(): DashboardCalendarEvent[] {
+  return mockEvents.map((event) => ({
+    ...event
+  }));
 }
 
 function classifyCapture(value: string): ComposerMode {
@@ -201,8 +238,11 @@ export function MatthewOSDashboard() {
   const [trips, setTrips] = useState<MockTrip[]>(mockTrips);
   const [projects, setProjects] = useState<MockProject[]>(mockProjects);
   const [bookmarks, setBookmarks] = useState<MockBookmark[]>(mockBookmarks);
-  const [events] = useState<MockEvent[]>(mockEvents);
+  const [events, setEvents] = useState<DashboardCalendarEvent[]>(getDefaultEvents);
   const [activity, setActivity] = useState("Demo mode: changes update this screen locally.");
+  const [calendarStatus, setCalendarStatus] = useState("Loading Apple Calendar...");
+  const [calendarConfigured, setCalendarConfigured] = useState(false);
+  const [calendarSyncedAt, setCalendarSyncedAt] = useState<string | null>(null);
   const [weatherLocation, setWeatherLocation] = useState("Dallas, TX");
   const [weather, setWeather] = useState<WeatherState | null>(null);
   const [weatherStatus, setWeatherStatus] = useState("Loading weather...");
@@ -239,6 +279,55 @@ export function MatthewOSDashboard() {
 
     void loadDashboardData();
   }, []);
+
+  const loadCalendar = useCallback(async ({ refresh = false }: { refresh?: boolean } = {}) => {
+    setCalendarStatus(refresh ? "Resyncing Apple Calendar..." : "Loading Apple Calendar...");
+
+    try {
+      const response = await fetch(`/api/calendar${refresh ? "?refresh=1" : ""}`);
+      const data = await response.json() as CalendarResponse;
+
+      setCalendarConfigured(data.configured);
+      setCalendarSyncedAt(data.refreshedAt ?? new Date().toISOString());
+
+      if (!response.ok || data.error) {
+        setEvents(getDefaultEvents());
+        setCalendarStatus(data.error ?? "Calendar unavailable. Showing mock events.");
+        return;
+      }
+
+      if (!data.configured) {
+        setEvents(getDefaultEvents());
+        setCalendarStatus("Apple Calendar URL is not configured. Showing mock events.");
+        return;
+      }
+
+      if (!data.events.length) {
+        setEvents([]);
+        setCalendarStatus("Apple Calendar synced. No upcoming events found.");
+        return;
+      }
+
+      setEvents(
+        data.events.map((event) => ({
+          id: event.id,
+          title: event.title,
+          time: formatCalendarTime(event.startsAt),
+          calendar: "Apple Calendar",
+          location: event.location,
+          startsAt: event.startsAt
+        }))
+      );
+      setCalendarStatus(`Apple Calendar synced with ${data.events.length} upcoming events.`);
+    } catch {
+      setEvents(getDefaultEvents());
+      setCalendarStatus("Calendar unavailable. Showing mock events.");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCalendar();
+  }, [loadCalendar]);
 
   const activeFeature = featureSections.find((section) => section.title === activeSection);
   const todayTasks = tasks.filter((task) => task.status === "Today").slice(0, 3);
@@ -570,12 +659,31 @@ export function MatthewOSDashboard() {
 
     if (section.title === "Calendar") {
       return (
-        <div className="grid gap-4 md:grid-cols-2">
-          {events.map((event) => (
-            <DatabaseCard key={event.id} title={event.title} eyebrow={event.calendar} meta={event.time}>
-              Calendar preview data. Future integration can pull Apple or Google events into this same shape.
-            </DatabaseCard>
-          ))}
+        <div className="space-y-4">
+          <div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-800 dark:bg-stone-900 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-semibold text-stone-950 dark:text-stone-50">{calendarStatus}</p>
+              <p className="mt-1 text-xs text-stone-500">
+                {calendarSyncedAt ? `Last sync: ${formatCalendarTime(calendarSyncedAt)}` : "Not synced yet"}
+                {calendarConfigured ? "" : " / Configure APPLE_CALENDAR_ICS_URL in Cloudflare to use live events."}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void loadCalendar({ refresh: true })}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-white dark:border-stone-800 dark:bg-stone-950 dark:text-stone-300 dark:hover:bg-stone-900"
+            >
+              <RefreshCw size={15} aria-hidden="true" />
+              Resync Calendar
+            </button>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            {events.map((event) => (
+              <DatabaseCard key={event.id} title={event.title} eyebrow={event.calendar} meta={event.time}>
+                {event.location ? event.location : "No location listed"}
+              </DatabaseCard>
+            ))}
+          </div>
         </div>
       );
     }
@@ -880,6 +988,15 @@ export function MatthewOSDashboard() {
                             <li key={event.id}>{event.time} / {event.title}</li>
                           ))}
                         </ul>
+                        <button
+                          type="button"
+                          onClick={() => void loadCalendar({ refresh: true })}
+                          className="mt-3 inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-xs font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
+                        >
+                          <CalendarDays size={14} aria-hidden="true" />
+                          Resync Calendar
+                        </button>
+                        <p className="mt-2 text-xs text-stone-400">{calendarStatus}</p>
                       </DatabaseCard>
                       <DatabaseCard title="Top Tasks" eyebrow="Today">
                         <ul className="space-y-2">

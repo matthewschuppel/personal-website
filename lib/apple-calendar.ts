@@ -176,7 +176,7 @@ function parseEvents(ics: string) {
     }));
 }
 
-export async function getAppleCalendarEvents() {
+export async function getAppleCalendarEvents({ refresh = false }: { refresh?: boolean } = {}) {
   const calendarUrl = getCalendarUrl();
 
   if (!calendarUrl) {
@@ -188,7 +188,8 @@ export async function getAppleCalendarEvents() {
 
   const response = await fetch(calendarUrl, {
     headers: { Accept: "text/calendar,*/*" },
-    next: { revalidate: 300 }
+    cache: refresh ? "no-store" : undefined,
+    next: refresh ? undefined : { revalidate: 300 }
   });
 
   if (!response.ok) {
