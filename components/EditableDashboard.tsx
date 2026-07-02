@@ -17,6 +17,8 @@ import {
   Plus,
   RotateCcw,
   Save,
+  Search,
+  Sparkles,
   Sun,
   Trash2,
   Upload
@@ -53,6 +55,12 @@ type CalendarResponse = {
   error?: string;
 };
 
+type SearchResult = {
+  id: string;
+  source: string;
+  text: string;
+};
+
 const STORAGE_KEY = "personal-os-dashboard-v1";
 
 const iconMap = {
@@ -68,6 +76,19 @@ const iconMap = {
   "Work Resources": BriefcaseBusiness,
   Review: ClipboardList,
   "Next Trip": Map
+};
+
+const categoryHints: Record<string, string[]> = {
+  Today: ["today", "now", "priority", "morning", "daily", "prep", "tonight", "urgent"],
+  Calendar: ["calendar", "meeting", "appointment", "schedule", "event", "call", "date", "time"],
+  Tasks: ["task", "todo", "send", "book", "buy", "finish", "renew", "call", "email", "pay"],
+  Notes: ["note", "idea", "remember", "thought", "question", "draft", "list", "journal"],
+  "Quick Links": ["link", "url", "website", "login", "portal", "app", "shortcut"],
+  Documents: ["document", "file", "pdf", "form", "paperwork", "tax", "resume", "contract"],
+  Travel: ["travel", "trip", "flight", "hotel", "packing", "itinerary", "passport", "vacation"],
+  Home: ["home", "house", "maintenance", "utility", "repair", "contractor", "clean", "garage"],
+  Wedding: ["wedding", "vendor", "guest", "venue", "registry", "budget", "timeline", "invite"],
+  "Work Resources": ["work", "job", "team", "template", "policy", "onboarding", "project", "client"]
 };
 
 function getInitialState(): DashboardState {
@@ -108,6 +129,100 @@ function readStoredState(): DashboardState {
   } catch {
     return getInitialState();
   }
+}
+
+function tokenize(value: string) {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 1);
+}
+
+function scoreText(queryTokens: string[], text: string) {
+  const normalizedText = text.toLowerCase();
+  return queryTokens.reduce((score, token) => {
+    if (normalizedText === token) {
+      return score + 5;
+    }
+
+    if (normalizedText.includes(token)) {
+      return score + 2;
+    }
+
+    return score;
+  }, 0);
+}
+
+function inferSectionIndex(input: string, sections: StoredSection[]) {
+  const inputTokens = tokenize(input);
+
+  if (inputTokens.length === 0) {
+    return sections.findIndex((section) => section.title === "Notes");
+  }
+
+  const scores = sections.map((section, index) => {
+    const hints = categoryHints[section.title] ?? [];
+    const sectionText = [section.title, ...hints, ...section.items].join(" ");
+    return {
+      index,
+      score: scoreText(inputTokens, sectionText)
+    };
+  });
+
+  const bestMatch = scores.sort((a, b) => b.score - a.score)[0];
+
+  if (!bestMatch || bestMatch.score === 0) {
+    const notesIndex = sections.findIndex((section) => section.title === "Notes");
+    return notesIndex >= 0 ? notesIndex : 0;
+  }
+
+  return bestMatch.index;
+}
+
+function searchDashboard(
+  query: string,
+  state: DashboardState,
+  calendarEvents: AppleCalendarEvent[]
+) {
+  const queryTokens = tokenize(query);
+
+  if (queryTokens.length === 0) {
+    return [] as SearchResult[];
+  }
+
+  const searchableItems: SearchResult[] = [
+    ...state.metrics.map((metric, index) => ({
+      id: `metric-${index}`,
+      source: "Today metrics",
+      text: `${metric.label}: ${metric.value}`
+    })),
+    ...state.plans.map((plan, index) => ({
+      id: `plan-${index}`,
+      source: plan.label,
+      text: plan.text
+    })),
+    ...state.sections.flatMap((section, sectionIndex) =>
+      section.items.map((item, itemIndex) => ({
+        id: `section-${sectionIndex}-${itemIndex}`,
+        source: section.title,
+        text: item
+      }))
+    ),
+    ...calendarEvents.map((event) => ({
+      id: `calendar-${event.id}`,
+      source: "Apple Calendar",
+      text: `${event.title}${event.location ? ` at ${event.location}` : ""}`
+    }))
+  ];
+
+  return searchableItems
+    .map((item) => ({
+      ...item,
+      score: scoreText(queryTokens, `${item.source} ${item.text}`)
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 6);
 }
 
 function Field({
@@ -152,6 +267,8 @@ export function EditableDashboard() {
   const [saveStatus, setSaveStatus] = useState("Saved");
   const [calendarStatus, setCalendarStatus] = useState("Loading");
   const [calendarEvents, setCalendarEvents] = useState<AppleCalendarEvent[]>([]);
+  const [smartInput, setSmartInput] = useState("");
+  const [smartStatus, setSmartStatus] = useState("Ready");
 
   useEffect(() => {
     setState(readStoredState());
@@ -201,6 +318,15 @@ export function EditableDashboard() {
   }, [isLoaded, state]);
 
   const exportData = useMemo(() => JSON.stringify(state, null, 2), [state]);
+  const inferredSection = useMemo(() => inferSectionIndex(smartInput, state.sections), [
+    smartInput,
+    state.sections
+  ]);
+  const searchResults = useMemo(() => searchDashboard(smartInput, state, calendarEvents), [
+    calendarEvents,
+    smartInput,
+    state
+  ]);
 
   function updateMetric(index: number, key: keyof DashboardMetric, value: string) {
     setSaveStatus("Saving...");
@@ -313,6 +439,30 @@ export function EditableDashboard() {
     event.target.value = "";
   }
 
+  function addSmartItem() {
+    const item = smartInput.trim();
+
+    if (!item) {
+      setSmartStatus("Nothing to add");
+      return;
+    }
+
+    const sectionIndex = inferredSection >= 0 ? inferredSection : 0;
+    const sectionTitle = state.sections[sectionIndex]?.title ?? "Notes";
+
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      sections: current.sections.map((section, currentSectionIndex) =>
+        currentSectionIndex === sectionIndex
+          ? { ...section, items: [item, ...section.items] }
+          : section
+      )
+    }));
+    setSmartInput("");
+    setSmartStatus(`Added to ${sectionTitle}`);
+  }
+
   function formatCalendarDate(value: string) {
     return new Intl.DateTimeFormat(undefined, {
       weekday: "short",
@@ -361,6 +511,63 @@ export function EditableDashboard() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
+              <Sparkles size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-ink">AI Search & Capture</h2>
+              <p className="mt-1 text-sm text-ink/60">{smartStatus}</p>
+            </div>
+          </div>
+          <div className="flex w-full flex-col gap-2 lg:max-w-2xl">
+            <label className="relative block">
+              <Search
+                size={17}
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/35"
+                aria-hidden="true"
+              />
+              <input
+                value={smartInput}
+                onChange={(event) => {
+                  setSmartInput(event.target.value);
+                  setSmartStatus("Ready");
+                }}
+                placeholder="Search or add material..."
+                className="w-full rounded-md border border-ink/10 bg-white py-3 pl-10 pr-3 text-sm text-ink outline-none transition focus:border-moss focus:ring-4 focus:ring-moss/15"
+              />
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex rounded-md bg-mist px-3 py-2 text-sm font-semibold text-ink/65">
+                {state.sections[inferredSection]?.title ?? "Notes"}
+              </span>
+              <button
+                type="button"
+                onClick={addSmartItem}
+                className="inline-flex items-center gap-2 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-paper transition hover:bg-moss"
+              >
+                <Plus size={16} aria-hidden="true" />
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+        {searchResults.length > 0 ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {searchResults.map((result) => (
+              <article key={result.id} className="rounded-md border border-ink/10 bg-mist/50 p-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">
+                  {result.source}
+                </p>
+                <p className="mt-2 text-sm leading-6 text-ink">{result.text}</p>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-6 rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
