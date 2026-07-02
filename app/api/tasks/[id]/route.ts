@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deleteTask, updateTask } from "@/lib/dashboard-db";
 
 type RouteContext = {
   params: Promise<{
@@ -9,14 +10,17 @@ type RouteContext = {
 export async function PATCH(request: Request, context: RouteContext) {
   const body = await request.json().catch(() => ({}));
   const { id } = await context.params;
+  const task = await updateTask(id, body);
 
-  // Future D1 integration: update the task by params.id and return the saved row.
-  return NextResponse.json({ task: { id, ...body } });
+  if (!task) {
+    return NextResponse.json({ error: "Task not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ task });
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-
-  // Future D1 integration: delete the task by params.id.
+  await deleteTask(id);
   return NextResponse.json({ deleted: true, id });
 }

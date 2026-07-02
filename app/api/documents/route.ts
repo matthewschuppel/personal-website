@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { mockDocuments } from "@/data/matthewos";
+import { listDocuments } from "@/lib/dashboard-db";
 
 export async function GET() {
-  // Future R2 integration: list DOCUMENTS_BUCKET objects and join metadata from D1 documents.
-  return NextResponse.json({ documents: mockDocuments });
+  const documents = await listDocuments();
+  return NextResponse.json({ documents });
 }

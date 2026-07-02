@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { deleteDocument } from "@/lib/dashboard-db";
 
 type RouteContext = {
   params: Promise<{
@@ -8,7 +9,6 @@ type RouteContext = {
 
 export async function DELETE(_request: Request, context: RouteContext) {
   const { id } = await context.params;
-
-  // Future R2 integration: delete the object from DOCUMENTS_BUCKET and metadata from D1 documents.
+  await deleteDocument(id);
   return NextResponse.json({ deleted: true, id });
 }

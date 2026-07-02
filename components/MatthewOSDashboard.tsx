@@ -1,7 +1,7 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Check,
@@ -174,6 +174,7 @@ export function MatthewOSDashboard() {
   const [capture, setCapture] = useState("");
   const [composerMode, setComposerMode] = useState<ComposerMode>("note");
   const captureInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [notes, setNotes] = useState<MockNote[]>(mockNotes);
   const [tasks, setTasks] = useState<MockTask[]>(mockTasks);
   const [documents, setDocuments] = useState<MockDocument[]>(mockDocuments);
@@ -182,6 +183,39 @@ export function MatthewOSDashboard() {
   const [bookmarks, setBookmarks] = useState<MockBookmark[]>(mockBookmarks);
   const [events] = useState<MockEvent[]>(mockEvents);
   const [activity, setActivity] = useState("Demo mode: changes update this screen locally.");
+
+  useEffect(() => {
+    async function loadDashboardData() {
+      try {
+        const [tasksResponse, notesResponse, documentsResponse] = await Promise.all([
+          fetch("/api/tasks"),
+          fetch("/api/notes"),
+          fetch("/api/documents")
+        ]);
+
+        if (tasksResponse.ok) {
+          const data = await tasksResponse.json() as { tasks?: MockTask[] };
+          setTasks(data.tasks ?? mockTasks);
+        }
+
+        if (notesResponse.ok) {
+          const data = await notesResponse.json() as { notes?: MockNote[] };
+          setNotes(data.notes ?? mockNotes);
+        }
+
+        if (documentsResponse.ok) {
+          const data = await documentsResponse.json() as { documents?: MockDocument[] };
+          setDocuments(data.documents ?? mockDocuments);
+        }
+
+        setActivity("Connected to MatthewOS APIs. Changes will use D1/R2 when Cloudflare bindings are available.");
+      } catch {
+        setActivity("Using local mock data because Cloudflare APIs are unavailable in this environment.");
+      }
+    }
+
+    void loadDashboardData();
+  }, []);
 
   const activeFeature = featureSections.find((section) => section.title === activeSection);
   const todayTasks = tasks.filter((task) => task.status === "Today").slice(0, 3);
@@ -205,11 +239,16 @@ export function MatthewOSDashboard() {
   }, [bookmarks, documents, notes, query, tasks, trips]);
 
   function openComposer(mode: ComposerMode, preset = "") {
+    if (mode === "document") {
+      fileInputRef.current?.click();
+      return;
+    }
+
     setComposerMode(mode);
     setCapture(preset);
   }
 
-  function saveCapture() {
+  async function saveCapture() {
     const value = (captureInputRef.current?.value ?? capture).trim();
 
     if (!value) {
@@ -221,31 +260,53 @@ export function MatthewOSDashboard() {
     const id = `${mode}-${Date.now()}`;
 
     if (mode === "task") {
-      setTasks((current) => [
-        {
+      const response = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           id,
           title: value,
           priority: "Medium",
           status: "Today",
           dueDate: "Today",
           area: "Today"
-        },
-        ...current
-      ]);
+        })
+      });
+      const data = await response.json().catch(() => null) as { task?: MockTask } | null;
+      const task = data?.task ?? {
+        id,
+        title: value,
+        priority: "Medium" as const,
+        status: "Today" as const,
+        dueDate: "Today",
+        area: "Today" as const
+      };
+
+      setTasks((current) => [task, ...current]);
       setActiveSection("Tasks");
     }
 
     if (mode === "note") {
-      setNotes((current) => [
-        {
+      const response = await fetch("/api/notes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           id,
           title: value,
-          summary: "Captured from the MatthewOS quick add demo.",
-          tags: ["Inbox"],
-          updatedAt: "Just now"
-        },
-        ...current
-      ]);
+          summary: "Captured from the MatthewOS quick add.",
+          tags: ["Inbox"]
+        })
+      });
+      const data = await response.json().catch(() => null) as { note?: MockNote } | null;
+      const note = data?.note ?? {
+        id,
+        title: value,
+        summary: "Captured from the MatthewOS quick add.",
+        tags: ["Inbox"],
+        updatedAt: "Just now"
+      };
+
+      setNotes((current) => [note, ...current]);
       setActiveSection("Notes");
     }
 
@@ -312,22 +373,66 @@ export function MatthewOSDashboard() {
     }
     setComposerMode("note");
     setActivity(`Saved "${value}" as ${composerLabels[mode].toLowerCase()}.`);
-    // Future persistence: replace the local state update with D1 inserts and R2 upload flows.
   }
 
   function handleComposerSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    saveCapture();
+    void saveCapture();
   }
 
-  function completeTask(id: string) {
+  async function completeTask(id: string) {
+    const existing = tasks.find((task) => task.id === id);
+    const nextTask = existing ? { ...existing, status: "Done" as const } : null;
+
     setTasks((current) => current.map((task) => (task.id === id ? { ...task, status: "Done" } : task)));
-    setActivity("Task marked done in the demo state.");
+    setActivity("Task marked done.");
+
+    if (nextTask) {
+      await fetch(`/api/tasks/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(nextTask)
+      }).catch(() => undefined);
+    }
   }
 
-  function deleteTask(id: string) {
+  async function deleteTask(id: string) {
     setTasks((current) => current.filter((task) => task.id !== id));
-    setActivity("Task removed from the demo state.");
+    setActivity("Task removed.");
+    await fetch(`/api/tasks/${id}`, { method: "DELETE" }).catch(() => undefined);
+  }
+
+  async function uploadSelectedDocument(file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("category", activeSection === "Documents" ? "Documents" : activeSection);
+
+    setActivity(`Uploading ${file.name} to R2...`);
+
+    try {
+      const response = await fetch("/api/documents/upload", {
+        method: "POST",
+        body: formData
+      });
+      const data = await response.json() as { document?: MockDocument; error?: string };
+
+      if (!response.ok || !data.document) {
+        setActivity(data.error ?? "Document upload failed.");
+        return;
+      }
+
+      setDocuments((current) => [data.document as MockDocument, ...current]);
+      setActiveSection("Documents");
+      setActivity(`Uploaded ${file.name} to R2 and saved metadata to D1.`);
+    } catch {
+      setActivity("Document upload failed because the API was unavailable.");
+    }
+  }
+
+  async function removeDocument(id: string) {
+    setDocuments((current) => current.filter((document) => document.id !== id));
+    setActivity("Document removed.");
+    await fetch(`/api/documents/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
   function renderTasks() {
@@ -352,7 +457,7 @@ export function MatthewOSDashboard() {
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() => completeTask(task.id)}
+                onClick={() => void completeTask(task.id)}
                 className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
               >
                 <Check size={15} aria-hidden="true" />
@@ -360,7 +465,7 @@ export function MatthewOSDashboard() {
               </button>
               <button
                 type="button"
-                onClick={() => deleteTask(task.id)}
+                onClick={() => void deleteTask(task.id)}
                 className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
               >
                 <Trash2 size={15} aria-hidden="true" />
@@ -410,15 +515,31 @@ export function MatthewOSDashboard() {
     if (section.title === "Documents") {
       return (
         <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="inline-flex items-center gap-2 rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white dark:bg-stone-50 dark:text-stone-950"
+          >
+            <UploadCloud size={16} aria-hidden="true" />
+            Upload Document
+          </button>
           {documents.map((document) => (
             <div
               key={document.id}
-              className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm shadow-sm dark:border-stone-800 dark:bg-stone-900 md:grid-cols-[1.4fr_0.8fr_0.6fr_0.7fr]"
+              className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm shadow-sm dark:border-stone-800 dark:bg-stone-900 md:grid-cols-[1.4fr_0.8fr_0.6fr_0.7fr_auto]"
             >
               <p className="font-semibold text-stone-950 dark:text-stone-50">{document.title}</p>
               <p>{document.category}</p>
               <p>{document.type}</p>
               <p>{document.updatedAt}</p>
+              <button
+                type="button"
+                onClick={() => void removeDocument(document.id)}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-stone-200 px-3 py-2 font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                Remove
+              </button>
             </div>
           ))}
         </div>
@@ -523,6 +644,20 @@ export function MatthewOSDashboard() {
 
   return (
     <main className="min-h-screen bg-stone-50 text-stone-950 dark:bg-stone-950 dark:text-stone-50">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+
+          if (file) {
+            void uploadSelectedDocument(file);
+          }
+
+          event.currentTarget.value = "";
+        }}
+      />
       <div className="grid min-h-screen lg:grid-cols-[280px_1fr]">
         <aside className="border-b border-stone-200 bg-white/85 p-4 backdrop-blur dark:border-stone-800 dark:bg-stone-950/80 lg:border-b-0 lg:border-r">
           <div className="rounded-2xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-800 dark:bg-stone-900">
