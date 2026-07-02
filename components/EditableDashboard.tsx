@@ -1,6 +1,6 @@
 "use client";
 
-import { ChangeEvent, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BriefcaseBusiness,
   CalendarDays,
@@ -8,7 +8,6 @@ import {
   Clock,
   CloudSun,
   ClipboardList,
-  Download,
   FileText,
   Heart,
   Home,
@@ -17,13 +16,10 @@ import {
   NotebookPen,
   Plane,
   Plus,
-  RotateCcw,
-  Save,
   Search,
   Sparkles,
   Sun,
   Trash2,
-  Upload
 } from "lucide-react";
 import {
   dashboardSections,
@@ -488,7 +484,7 @@ function Field({
 export function EditableDashboard() {
   const [state, setState] = useState<DashboardState>(() => getInitialState());
   const [isLoaded, setIsLoaded] = useState(false);
-  const [saveStatus, setSaveStatus] = useState("Saved");
+  const [, setSaveStatus] = useState("Saved");
   const [calendarStatus, setCalendarStatus] = useState("Loading");
   const [calendarEvents, setCalendarEvents] = useState<AppleCalendarEvent[]>([]);
   const [smartInput, setSmartInput] = useState("");
@@ -683,7 +679,6 @@ export function EditableDashboard() {
     return () => window.clearTimeout(saveTimer);
   }, [isLoaded, state]);
 
-  const exportData = useMemo(() => JSON.stringify(state, null, 2), [state]);
   const inferredSection = useMemo(() => inferSectionIndex(smartInput, state.sections), [
     smartInput,
     state.sections
@@ -813,46 +808,6 @@ export function EditableDashboard() {
     }));
   }
 
-  function resetDashboard() {
-    setState(getInitialState());
-    setSaveStatus("Saved");
-  }
-
-  function downloadDashboard() {
-    const blob = new Blob([exportData], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const linkElement = document.createElement("a");
-    linkElement.href = url;
-    linkElement.download = "personal-dashboard.json";
-    linkElement.click();
-    URL.revokeObjectURL(url);
-  }
-
-  function importDashboard(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const parsed = JSON.parse(String(reader.result)) as DashboardState;
-        setState({
-          metrics: Array.isArray(parsed.metrics) ? parsed.metrics : todayMetrics,
-          plans: Array.isArray(parsed.plans) ? parsed.plans : getInitialState().plans,
-          sections: Array.isArray(parsed.sections) ? parsed.sections : getInitialState().sections
-        });
-        setSaveStatus("Saved");
-      } catch {
-        setSaveStatus("Import failed");
-      }
-    };
-    reader.readAsText(file);
-    event.target.value = "";
-  }
-
   function addSmartItem() {
     const item = smartInput.trim();
 
@@ -912,44 +867,6 @@ export function EditableDashboard() {
 
   return (
     <>
-      <section className="mt-6 rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <p className="text-sm font-semibold text-ink">Edit mode</p>
-            <p className="mt-1 text-sm text-ink/60">
-              Changes sync through Cloudflare R2 so your dashboard follows you across devices.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <span className="inline-flex items-center gap-2 rounded-md bg-mist px-3 py-2 text-sm font-semibold text-ink/70">
-              <Save size={16} aria-hidden="true" />
-              {saveStatus}
-            </span>
-            <button
-              type="button"
-              onClick={downloadDashboard}
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
-            >
-              <Download size={16} aria-hidden="true" />
-              Export
-            </button>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist">
-              <Upload size={16} aria-hidden="true" />
-              Import
-              <input type="file" accept="application/json" onChange={importDashboard} className="sr-only" />
-            </label>
-            <button
-              type="button"
-              onClick={resetDashboard}
-              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
-            >
-              <RotateCcw size={16} aria-hidden="true" />
-              Reset
-            </button>
-          </div>
-        </div>
-      </section>
-
       <section className="mt-6 overflow-hidden rounded-lg border border-ink/10 bg-white shadow-sm">
         <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
           <div className="bg-ink p-6 text-paper sm:p-7">
