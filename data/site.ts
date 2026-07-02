@@ -1,16 +1,15 @@
 export const siteConfig = {
   name: "Matthew Schuppel",
-  title: "Operator, builder, and systems-minded problem solver",
-  location: "Madison, Wisconsin",
-  email: "hello@example.com",
-  phone: "(555) 123-4567",
-  domain: "yourdomain.com",
+  title: "Biomedical Engineer",
+  location: "Dallas, TX",
+  email: "matthew@matthewschuppel.com",
+  phone: "(269) 568-8014",
+  domain: "matthewschuppel.com",
   summary:
     "A clean personal hub for professional presence, life systems, documents, planning, and the resources that keep each week moving.",
   availability: "Open to selected collaborations and advisory conversations.",
   socials: [
-    { label: "LinkedIn", href: "https://linkedin.com/in/your-profile" },
-    { label: "GitHub", href: "https://github.com/your-profile" },
+    { label: "LinkedIn", href: "https://linkedin.com/in/matthewschuppel" },
     { label: "Resume PDF", href: "/resume" }
   ]
 };
@@ -23,26 +22,19 @@ export const resume = {
   ],
   experience: [
     {
-      role: "Operations Lead",
-      company: "Example Company",
-      years: "2023 - Present",
+      role: "Clinical Application Specialist",
+      company: "Carthera Inc",
+      years: "Apr 2024 - Present",
       description:
-        "Designed team rituals, reporting workflows, vendor processes, and execution dashboards for a growing organization."
+        "Some Stuff"
     },
     {
-      role: "Project Manager",
-      company: "Previous Organization",
-      years: "2020 - 2023",
+      role: "Clinical Support Engineer",
+      company: "Renishaw Healthcare Inc",
+      years: "Feb 2022 - Apr 2024 ",
       description:
-        "Coordinated complex projects, improved handoffs, and kept timelines visible for internal and external partners."
+        "More Stuff"
     },
-    {
-      role: "Analyst",
-      company: "Earlier Team",
-      years: "2017 - 2020",
-      description:
-        "Turned messy inputs into clear recommendations, models, and repeatable operating cadences."
-    }
   ],
   skills: [
     "Operations",
@@ -56,9 +48,9 @@ export const resume = {
   ],
   education: [
     {
-      school: "University Name",
-      degree: "Degree or Certification",
-      years: "Year"
+      school: "University of Oklahoma",
+      degree: "B.S of Biomedical Engineering",
+      years: "2017-2021"
     }
   ]
 };
