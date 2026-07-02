@@ -1,13 +1,15 @@
 "use client";
 
 import type { FormEvent, ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
   Check,
   Command,
   FilePlus2,
+  MapPin,
   Plus,
+  RefreshCw,
   Search,
   Trash2,
   UploadCloud
@@ -50,6 +52,20 @@ type DatabaseCardProps = {
 };
 
 type ComposerMode = "note" | "task" | "document" | "trip" | "project" | "bookmark";
+
+type WeatherState = {
+  location: string;
+  temperature: number;
+  feelsLike: number;
+  condition: string;
+  windSpeed: number;
+  precipitation: number;
+  units: {
+    temperature: string;
+    windSpeed: string;
+  };
+  source: string;
+};
 
 const composerLabels: Record<ComposerMode, string> = {
   note: "New Note",
@@ -111,6 +127,10 @@ function classifyCapture(value: string): ComposerMode {
   }
 
   return "note";
+}
+
+function isWeatherState(value: WeatherState | { error?: string }): value is WeatherState {
+  return "temperature" in value && "location" in value;
 }
 
 function DatabaseCard({ title, eyebrow, meta, children }: DatabaseCardProps) {
@@ -183,6 +203,9 @@ export function MatthewOSDashboard() {
   const [bookmarks, setBookmarks] = useState<MockBookmark[]>(mockBookmarks);
   const [events] = useState<MockEvent[]>(mockEvents);
   const [activity, setActivity] = useState("Demo mode: changes update this screen locally.");
+  const [weatherLocation, setWeatherLocation] = useState("Dallas, TX");
+  const [weather, setWeather] = useState<WeatherState | null>(null);
+  const [weatherStatus, setWeatherStatus] = useState("Loading weather...");
 
   useEffect(() => {
     async function loadDashboardData() {
@@ -246,6 +269,51 @@ export function MatthewOSDashboard() {
 
     setComposerMode(mode);
     setCapture(preset);
+  }
+
+  const loadWeather = useCallback(async (location: string) => {
+    const nextLocation = location.trim() || "Dallas, TX";
+
+    setWeatherStatus(`Loading weather for ${nextLocation}...`);
+
+    try {
+      const response = await fetch(`/api/weather?location=${encodeURIComponent(nextLocation)}`);
+      const data = await response.json() as WeatherState | { error?: string };
+
+      if (!response.ok || !isWeatherState(data)) {
+        setWeatherStatus("Weather unavailable. Showing Dallas fallback soon.");
+
+        if (nextLocation !== "Dallas, TX") {
+          await loadWeather("Dallas, TX");
+        }
+
+        return;
+      }
+
+      setWeather(data);
+      setWeatherLocation(nextLocation);
+      window.localStorage.setItem("matthewos-weather-location", nextLocation);
+      setWeatherStatus(`${data.location} weather from ${data.source}`);
+    } catch {
+      setWeatherStatus("Weather unavailable right now.");
+    }
+  }, []);
+
+  useEffect(() => {
+    const savedLocation = window.localStorage.getItem("matthewos-weather-location");
+
+    if (savedLocation) {
+      setWeatherLocation(savedLocation);
+      void loadWeather(savedLocation);
+      return;
+    }
+
+    void loadWeather("Dallas, TX");
+  }, [loadWeather]);
+
+  function handleWeatherSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    void loadWeather(weatherLocation);
   }
 
   async function saveCapture() {
@@ -766,12 +834,43 @@ export function MatthewOSDashboard() {
                       </h2>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <StatusPill>{getDateLabel()}</StatusPill>
-                        <StatusPill>Dallas, TX / 78 F / clear placeholder</StatusPill>
+                        <StatusPill>
+                          {weather
+                            ? `${weather.location} / ${weather.temperature}${weather.units.temperature} / ${weather.condition}`
+                            : weatherStatus}
+                        </StatusPill>
                         <StatusPill>{tasks.filter((task) => task.status !== "Done").length} open tasks</StatusPill>
                       </div>
                       <p className="mt-5 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">
                         Today has {events.slice(0, 3).length} events, {todayTasks.length} top tasks,
                         {documents.length} document records, and {trips.length} trips in the planning system.
+                      </p>
+                      <form onSubmit={handleWeatherSubmit} className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <label className="relative block">
+                          <MapPin
+                            size={16}
+                            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-stone-400"
+                            aria-hidden="true"
+                          />
+                          <input
+                            value={weatherLocation}
+                            onChange={(event) => setWeatherLocation(event.target.value)}
+                            placeholder="Weather location"
+                            className="w-full rounded-xl border border-stone-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-200 dark:border-stone-800 dark:bg-stone-950 dark:focus:ring-stone-800"
+                          />
+                        </label>
+                        <button
+                          type="submit"
+                          className="inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm font-semibold text-stone-600 hover:bg-white dark:border-stone-800 dark:bg-stone-950 dark:text-stone-300 dark:hover:bg-stone-900"
+                        >
+                          <RefreshCw size={15} aria-hidden="true" />
+                          Update Weather
+                        </button>
+                      </form>
+                      <p className="mt-2 text-xs text-stone-400">
+                        {weather
+                          ? `Feels like ${weather.feelsLike}${weather.units.temperature}, wind ${weather.windSpeed} ${weather.units.windSpeed}, precipitation ${weather.precipitation} in.`
+                          : weatherStatus}
                       </p>
                     </div>
                     <div className="grid gap-3">
