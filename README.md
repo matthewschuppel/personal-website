@@ -28,6 +28,15 @@ Before deploying, create that bucket in Cloudflare R2 or change `bucket_name` in
 match the bucket you already created. Uploading, editing, and deleting photos is available only when
 you are logged into `/dashboard`; public visitors can view the gallery.
 
+## Apple Calendar
+
+The dashboard can show upcoming Apple Calendar events from an iCloud calendar subscription link.
+Set `APPLE_CALENDAR_ICS_URL` as a Cloudflare text variable or secret. For local development, add it
+to `.env.local`.
+
+In Apple Calendar, publish or share the calendar, copy the `.ics` subscription URL, and use that as
+the value. Keep that URL private because anyone with the link may be able to read that calendar.
+
 ## Deploy To Cloudflare
 
 This app includes a password-protected dashboard, middleware, cookies, and server actions. Because
@@ -49,10 +58,11 @@ Before deploy:
    pnpm wrangler secret put DASHBOARD_PASSWORD
    ```
 
-2. Update `NEXT_PUBLIC_SITE_URL` in `wrangler.jsonc`.
-3. Create the R2 bucket named in `wrangler.jsonc` under `r2_buckets`.
-4. Update the Cloudflare project name in `wrangler.jsonc` if desired.
-5. Deploy with `pnpm cf:deploy`.
+2. Add `APPLE_CALENDAR_ICS_URL` as a Cloudflare variable if you want Apple Calendar events.
+3. Update `NEXT_PUBLIC_SITE_URL` in `wrangler.jsonc`.
+4. Create the R2 bucket named in `wrangler.jsonc` under `r2_buckets`.
+5. Update the Cloudflare project name in `wrangler.jsonc` if desired.
+6. Deploy with `pnpm cf:deploy`.
 
 ## Custom Domain On Cloudflare
 

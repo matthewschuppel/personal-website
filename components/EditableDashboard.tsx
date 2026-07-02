@@ -39,6 +39,20 @@ type DashboardState = {
   sections: StoredSection[];
 };
 
+type AppleCalendarEvent = {
+  id: string;
+  title: string;
+  startsAt: string;
+  endsAt: string | null;
+  location: string;
+};
+
+type CalendarResponse = {
+  configured: boolean;
+  events: AppleCalendarEvent[];
+  error?: string;
+};
+
 const STORAGE_KEY = "personal-os-dashboard-v1";
 
 const iconMap = {
@@ -136,10 +150,45 @@ export function EditableDashboard() {
   const [state, setState] = useState<DashboardState>(() => getInitialState());
   const [isLoaded, setIsLoaded] = useState(false);
   const [saveStatus, setSaveStatus] = useState("Saved");
+  const [calendarStatus, setCalendarStatus] = useState("Loading");
+  const [calendarEvents, setCalendarEvents] = useState<AppleCalendarEvent[]>([]);
 
   useEffect(() => {
     setState(readStoredState());
     setIsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    fetch("/api/calendar")
+      .then((response) => response.json() as Promise<CalendarResponse>)
+      .then((calendar) => {
+        if (!isActive) {
+          return;
+        }
+
+        setCalendarEvents(calendar.events ?? []);
+
+        if (calendar.error) {
+          setCalendarStatus("Unavailable");
+        } else if (!calendar.configured) {
+          setCalendarStatus("Not connected");
+        } else if (calendar.events.length === 0) {
+          setCalendarStatus("No upcoming events");
+        } else {
+          setCalendarStatus("Connected");
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setCalendarStatus("Unavailable");
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -264,6 +313,16 @@ export function EditableDashboard() {
     event.target.value = "";
   }
 
+  function formatCalendarDate(value: string) {
+    return new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    }).format(new Date(value));
+  }
+
   return (
     <>
       <section className="mt-6 rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
@@ -302,6 +361,33 @@ export function EditableDashboard() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="mt-6 rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
+              <CalendarDays size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <h2 className="text-lg font-semibold text-ink">Apple Calendar</h2>
+              <p className="mt-1 text-sm text-ink/60">{calendarStatus}</p>
+            </div>
+          </div>
+        </div>
+        {calendarEvents.length > 0 ? (
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {calendarEvents.map((event) => (
+              <article key={event.id} className="rounded-md border border-ink/10 bg-mist/50 p-4">
+                <p className="text-sm font-semibold text-ink">{event.title}</p>
+                <p className="mt-2 text-sm text-ink/65">{formatCalendarDate(event.startsAt)}</p>
+                {event.location ? (
+                  <p className="mt-1 text-sm text-ink/55">{event.location}</p>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
