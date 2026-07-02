@@ -21,8 +21,9 @@ Set `DASHBOARD_PASSWORD` in `.env.local`, then visit `/dashboard`.
 
 ## Gallery Storage
 
-The public Gallery page stores uploaded travel photos in Cloudflare R2. The current binding expects
-an R2 bucket named `mws-gallery` in `wrangler.jsonc`.
+The public Gallery page stores uploaded travel photos in Cloudflare R2. The private dashboard also
+stores its synced editable state in R2 so changes follow you across devices. The current bindings
+expect an R2 bucket named `mws-gallery` in `wrangler.jsonc`.
 
 Before deploying, create that bucket in Cloudflare R2 or change `bucket_name` in `wrangler.jsonc` to
 match the bucket you already created. Uploading, editing, and deleting photos is available only when

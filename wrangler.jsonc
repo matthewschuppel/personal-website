@@ -15,6 +15,10 @@
     {
       "binding": "GALLERY_BUCKET",
       "bucket_name": "mws-gallery"
+    },
+    {
+      "binding": "DASHBOARD_BUCKET",
+      "bucket_name": "mws-gallery"
     }
   ],
   "routes": [

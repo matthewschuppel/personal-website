@@ -55,6 +55,11 @@ type CalendarResponse = {
   error?: string;
 };
 
+type DashboardDataResponse = {
+  state: DashboardState;
+  source?: "r2" | "default";
+};
+
 type SearchResult = {
   id: string;
   source: string;
@@ -271,8 +276,44 @@ export function EditableDashboard() {
   const [smartStatus, setSmartStatus] = useState("Ready");
 
   useEffect(() => {
-    setState(readStoredState());
-    setIsLoaded(true);
+    let isActive = true;
+
+    fetch("/api/dashboard-data")
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Dashboard data unavailable");
+        }
+
+        return response.json() as Promise<DashboardDataResponse>;
+      })
+      .then((data) => {
+        if (!isActive) {
+          return;
+        }
+
+        const nextState = data.source === "default" ? readStoredState() : data.state;
+
+        setState(nextState);
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(nextState));
+        setSaveStatus(data.source === "default" ? "Ready to sync" : "Synced");
+      })
+      .catch(() => {
+        if (!isActive) {
+          return;
+        }
+
+        setState(readStoredState());
+        setSaveStatus("Using local backup");
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoaded(true);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -314,7 +355,25 @@ export function EditableDashboard() {
     }
 
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    setSaveStatus("Saved");
+    setSaveStatus("Syncing...");
+
+    const saveTimer = window.setTimeout(() => {
+      fetch("/api/dashboard-data", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ state })
+      })
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Save failed");
+          }
+
+          setSaveStatus("Synced");
+        })
+        .catch(() => setSaveStatus("Saved locally"));
+    }, 600);
+
+    return () => window.clearTimeout(saveTimer);
   }, [isLoaded, state]);
 
   const exportData = useMemo(() => JSON.stringify(state, null, 2), [state]);
@@ -480,7 +539,7 @@ export function EditableDashboard() {
           <div>
             <p className="text-sm font-semibold text-ink">Edit mode</p>
             <p className="mt-1 text-sm text-ink/60">
-              Changes save automatically in this browser. Export a backup before switching devices.
+              Changes sync through Cloudflare R2 so your dashboard follows you across devices.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

@@ -1,4 +1,4 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { getR2Bucket } from "@/lib/r2-storage";
 
 export type GalleryPhoto = {
   id: string;
@@ -10,23 +10,6 @@ export type GalleryPhoto = {
   createdAt: string;
 };
 
-type R2ObjectLike = {
-  arrayBuffer(): Promise<ArrayBuffer>;
-  httpMetadata?: {
-    contentType?: string;
-  };
-};
-
-type R2BucketLike = {
-  get(key: string): Promise<R2ObjectLike | null>;
-  put(
-    key: string,
-    value: string | ArrayBuffer,
-    options?: { httpMetadata?: { contentType?: string } }
-  ): Promise<unknown>;
-  delete(key: string): Promise<void>;
-};
-
 const INDEX_KEY = "gallery/index.json";
 const PHOTO_PREFIX = "gallery/photos";
 
@@ -35,14 +18,7 @@ export type PublicGalleryPhoto = Omit<GalleryPhoto, "objectKey"> & {
 };
 
 function getBucket() {
-  const context = getCloudflareContext();
-  const bucket = (context.env as CloudflareEnv & { GALLERY_BUCKET?: R2BucketLike }).GALLERY_BUCKET;
-
-  if (!bucket) {
-    throw new Error("Missing Cloudflare R2 binding: GALLERY_BUCKET");
-  }
-
-  return bucket;
+  return getR2Bucket("GALLERY_BUCKET");
 }
 
 function toPublicPhoto(photo: GalleryPhoto): PublicGalleryPhoto {
