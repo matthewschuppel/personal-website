@@ -27,6 +27,31 @@ export default function ContactPage() {
               {siteConfig.location}
             </p>
           </div>
+          <form className="mt-8 grid gap-3" aria-label="Contact form placeholder">
+            {/* Future email integration: connect this form to Resend, SendGrid, Mailgun, or a Cloudflare Worker email flow. */}
+            <input
+              className="rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              placeholder="Your name"
+              disabled
+            />
+            <input
+              className="rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              placeholder="Your email"
+              disabled
+            />
+            <textarea
+              className="min-h-28 rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              placeholder="Message placeholder"
+              disabled
+            />
+            <button
+              type="button"
+              className="rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper opacity-70"
+              disabled
+            >
+              Form coming later
+            </button>
+          </form>
         </section>
         <section className="rounded-lg border border-ink/10 bg-ink p-6 text-paper shadow-crisp">
           <h2 className="text-xl font-semibold">Profiles</h2>

@@ -1,6 +1,35 @@
 # Matthew Schuppel Website
 
-A minimal public personal website plus a private-ready Notion-inspired dashboard called MatthewOS.
+A polished public personal website plus a private-ready personal operating system called MatthewOS.
+
+## Structure
+
+Public routes:
+
+- `/`
+- `/about`
+- `/resume`
+- `/gallery`
+- `/contact`
+
+Private route:
+
+- `/dashboard`
+
+The public pages stay minimal and professional. MatthewOS is intentionally separated under
+`/dashboard` so dashboard data is not exposed in public navigation or public page code.
+
+## Tech Stack
+
+- Next.js App Router
+- TypeScript
+- Tailwind CSS
+- Cloudflare Pages / Cloudflare runtime
+- Cloudflare D1 for future structured dashboard data
+- Cloudflare R2 for future files and media
+
+This project is not configured as static export-only. Do not add `output: "export"` to
+`next.config.mjs`; MatthewOS is prepared for long-term dynamic functionality.
 
 ## Quick Start
 
@@ -12,72 +41,139 @@ npm run dev
 
 ## Customize
 
-- Personal details: `data/site.ts`
+- Site identity and resume data: `data/site.ts`
 - MatthewOS mock data: `data/matthewos.ts`
-- Styling: `tailwind.config.ts` and `app/globals.css`
-- Public pages: `app/page.tsx`, `app/about/page.tsx`, `app/resume/page.tsx`, `app/contact/page.tsx`, `app/gallery/page.tsx`
+- Public pages: `app/page.tsx`, `app/about/page.tsx`, `app/resume/page.tsx`, `app/gallery/page.tsx`, `app/contact/page.tsx`
 - Dashboard shell: `components/MatthewOSDashboard.tsx`
+- D1 schema: `schema.sql`
+- Cloudflare bindings: `wrangler.jsonc`
 - Previous structure snapshot: `docs/previous-website-structure.md`
 
-## Gallery Storage
+## Cloudflare Pages Deployment
 
-The public Gallery page stores uploaded travel photos in Cloudflare R2. MatthewOS stores user-captured
-dashboard input in R2 so changes can follow you across devices. The current bindings expect an R2
-bucket named `mws-gallery` in `wrangler.jsonc`.
+Use the GitHub repository as the Cloudflare Pages source.
 
-Before deploying, create that bucket in Cloudflare R2 or change `bucket_name` in `wrangler.jsonc` to
-match the bucket you already created.
+Recommended settings:
 
-## Apple Calendar
+- Framework preset: Next.js
+- Build command: `npm run build`
+- Output directory: leave as the framework default for Next.js runtime builds
+- Node version: current LTS
 
-The dashboard can show upcoming Apple Calendar events from an iCloud calendar subscription link.
-Set `APPLE_CALENDAR_ICS_URL` as a Cloudflare text variable or secret. For local development, add it
-to `.env.local`.
+Because this app uses route handlers and Cloudflare bindings, keep it dynamic. The dashboard API
+routes are scaffolded for Cloudflare runtime access to D1 and R2.
 
-In Apple Calendar, publish or share the calendar, copy the `.ics` subscription URL, and use that as
-the value. Keep that URL private because anyone with the link may be able to read that calendar.
+## Cloudflare D1
 
-## Deploy To Cloudflare
-
-Because R2-backed dashboard input and gallery storage need server-side bindings, deploy the full app
-as a Next.js app on Cloudflare Workers using the OpenNext Cloudflare adapter.
+Create the database:
 
 ```bash
-npm install
+npx wrangler d1 create matthewos
+```
+
+Copy the returned database id into `wrangler.jsonc` under the `DB` binding.
+
+Apply the schema:
+
+```bash
+npx wrangler d1 execute matthewos --file=./schema.sql
+```
+
+In Cloudflare Pages, add a D1 binding:
+
+- Binding name: `DB`
+- Database: `matthewos`
+
+Tables included in `schema.sql`:
+
+- `notes`
+- `tasks`
+- `documents`
+- `trips`
+- `home_projects`
+- `work_projects`
+- `bookmarks`
+- `gallery_items`
+
+## Cloudflare R2
+
+Create buckets:
+
+```bash
+npx wrangler r2 bucket create matthewos-documents
+npx wrangler r2 bucket create mws-gallery
+```
+
+In Cloudflare Pages, add R2 bindings:
+
+- Binding name: `DOCUMENTS_BUCKET`, bucket: `matthewos-documents`
+- Binding name: `GALLERY_BUCKET`, bucket: `mws-gallery`
+- Binding name: `DASHBOARD_BUCKET`, bucket: `mws-gallery` or a separate private dashboard bucket
+
+The current document and gallery endpoints are placeholders. They show where upload, list, download,
+and delete logic should connect to R2 and where metadata should connect to D1.
+
+## Protect `/dashboard` With Cloudflare Access
+
+Do not put real personal data into MatthewOS until `/dashboard` is protected.
+
+In Cloudflare Zero Trust:
+
+1. Open Access > Applications.
+2. Add a self-hosted application.
+3. Set the application domain to `matthewschuppel.com`.
+4. Protect the path `/dashboard*`.
+5. Add an allow policy for your email address.
+6. Test in an incognito browser before adding private data.
+
+The app does not include custom login code yet. Cloudflare Access should sit in front of the private
+route. Clerk or Auth.js can be added later if you want app-level authentication.
+
+## API Scaffolds
+
+Route handlers included:
+
+- `GET /api/tasks`
+- `POST /api/tasks`
+- `PATCH /api/tasks/:id`
+- `DELETE /api/tasks/:id`
+- `GET /api/notes`
+- `POST /api/notes`
+- `PATCH /api/notes/:id`
+- `DELETE /api/notes/:id`
+- `GET /api/documents`
+- `POST /api/documents/upload`
+- `DELETE /api/documents/:id`
+- `GET /api/gallery`
+
+The handlers return mock data or preview responses today. Replace the comments with D1 queries and
+R2 operations when you are ready to make the dashboard fully persistent.
+
+## Optional OpenNext Cloudflare Commands
+
+This repository includes OpenNext scripts for Cloudflare runtime builds:
+
+```bash
 npm run build
 pnpm cf:build
 pnpm cf:deploy
 ```
 
-Before deploy:
+Before deploying with `pnpm cf:deploy`, replace the placeholder D1 database id in `wrangler.jsonc`.
 
-1. Add `APPLE_CALENDAR_ICS_URL` as a Cloudflare variable if you want Apple Calendar events.
-2. Update `NEXT_PUBLIC_SITE_URL` in `wrangler.jsonc`.
-3. Create the R2 bucket named in `wrangler.jsonc` under `r2_buckets`.
-4. Protect `/dashboard` with Cloudflare Access, Clerk, or Auth.js when ready.
-5. Deploy with `pnpm cf:deploy`.
+## Custom Domain
 
-## Custom Domain On Cloudflare
+For `matthewschuppel.com`, make sure the domain is active in Cloudflare DNS and connected to the
+Cloudflare Pages project or Worker route. The current `wrangler.jsonc` includes routes for:
 
-After deployment, open the Cloudflare dashboard and attach your custom domain to the deployed
-Worker route. Set the route to your domain, for example `yourdomain.com/*`, and make sure DNS for
-the domain is managed by Cloudflare.
+- `matthewschuppel.com/*`
+- `www.matthewschuppel.com/*`
 
-## Cloudflare Pages Settings
+## Environment Variables
 
-For a static-only public version, use:
+Optional:
 
-- Build command: `npm run build`
-- Output directory: `out`
+- `NEXT_PUBLIC_SITE_URL=https://matthewschuppel.com`
+- `APPLE_CALENDAR_ICS_URL=your-private-icloud-ics-url`
 
-The current R2-backed MatthewOS build is not a pure static export because R2 requires Cloudflare
-runtime bindings. Use Cloudflare Workers/OpenNext for the full version, or split the public site into
-a static Pages project later.
-
-## Deploy And Connect A Custom Domain On Vercel
-
-1. Push the project to GitHub.
-2. Import the repository into Vercel.
-3. In Vercel, open Project Settings > Domains and add your custom domain.
-4. Update your DNS records as instructed by Vercel.
-5. Set `NEXT_PUBLIC_SITE_URL` to your production URL.
+Keep calendar URLs private. Anyone with a published iCloud calendar URL may be able to read it.
