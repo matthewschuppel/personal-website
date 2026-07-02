@@ -421,6 +421,34 @@ function describeWeather(code: number) {
   return "Weather";
 }
 
+function getGreeting(date: Date) {
+  const hour = date.getHours();
+
+  if (hour < 12) {
+    return "Good Morning";
+  }
+
+  if (hour < 17) {
+    return "Good Afternoon";
+  }
+
+  if (hour < 22) {
+    return "Good Evening";
+  }
+
+  return "Good Night";
+}
+
+function isSameCalendarDay(value: string, date: Date) {
+  const eventDate = new Date(value);
+
+  return (
+    eventDate.getFullYear() === date.getFullYear() &&
+    eventDate.getMonth() === date.getMonth() &&
+    eventDate.getDate() === date.getDate()
+  );
+}
+
 function Field({
   label,
   value,
@@ -868,6 +896,19 @@ export function EditableDashboard() {
     hour: "numeric",
     minute: "2-digit"
   }).format(now);
+  const greeting = getGreeting(now);
+  const todaySection = state.sections.find((section) => section.title.toLowerCase() === "today");
+  const tasksSection = state.sections.find((section) => section.title.toLowerCase() === "tasks");
+  const calendarSection = state.sections.find((section) => section.title.toLowerCase() === "calendar");
+  const todayCalendarEvents = calendarEvents
+    .filter((event) => isSameCalendarDay(event.startsAt, now))
+    .slice(0, 3);
+  const manualCalendarItems = calendarSection?.items.slice(0, 3) ?? [];
+  const todayTodos = [...(todaySection?.items ?? []), ...(tasksSection?.items ?? [])].slice(0, 4);
+  const eventSummary =
+    todayCalendarEvents.length > 0
+      ? todayCalendarEvents.map((event) => `${formatCalendarDate(event.startsAt)} - ${event.title}`)
+      : manualCalendarItems;
 
   return (
     <>
@@ -905,6 +946,73 @@ export function EditableDashboard() {
               <RotateCcw size={16} aria-hidden="true" />
               Reset
             </button>
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 overflow-hidden rounded-lg border border-ink/10 bg-white shadow-sm">
+        <div className="grid gap-0 lg:grid-cols-[1.1fr_1fr]">
+          <div className="bg-ink p-6 text-paper sm:p-7">
+            <p className="text-sm font-semibold uppercase tracking-[0.16em] text-amber">
+              Daily Brief
+            </p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">
+              {greeting}, Matthew
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-paper/65">
+              {eventSummary.length} calendar item{eventSummary.length === 1 ? "" : "s"} and{" "}
+              {todayTodos.length} to-do{todayTodos.length === 1 ? "" : "s"} are on deck today.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2">
+              <span className="rounded-md bg-paper/10 px-3 py-2 text-sm font-semibold text-paper/80">
+                {formattedTime}
+              </span>
+              <span className="rounded-md bg-paper/10 px-3 py-2 text-sm font-semibold text-paper/80">
+                {weather.status === "loading"
+                  ? "Weather loading"
+                  : `${weather.temperature ?? "--"}°F ${weather.condition}`}
+              </span>
+            </div>
+          </div>
+          <div className="grid gap-4 p-5 sm:p-6">
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <CalendarDays size={18} className="text-moss" aria-hidden="true" />
+                <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-ink/50">
+                  Today&apos;s Events
+                </h3>
+              </div>
+              {eventSummary.length > 0 ? (
+                <ul className="space-y-2">
+                  {eventSummary.map((event, index) => (
+                    <li key={`${event}-${index}`} className="rounded-md bg-mist px-3 py-2 text-sm text-ink/75">
+                      {event}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md bg-mist px-3 py-2 text-sm text-ink/60">No events listed.</p>
+              )}
+            </div>
+            <div>
+              <div className="mb-3 flex items-center gap-2">
+                <CheckSquare size={18} className="text-moss" aria-hidden="true" />
+                <h3 className="text-sm font-semibold uppercase tracking-[0.12em] text-ink/50">
+                  To-Dos
+                </h3>
+              </div>
+              {todayTodos.length > 0 ? (
+                <ul className="space-y-2">
+                  {todayTodos.map((todo, index) => (
+                    <li key={`${todo}-${index}`} className="rounded-md bg-mist px-3 py-2 text-sm text-ink/75">
+                      {todo}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="rounded-md bg-mist px-3 py-2 text-sm text-ink/60">No to-dos listed.</p>
+              )}
+            </div>
           </div>
         </div>
       </section>
