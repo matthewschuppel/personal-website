@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { canManageGallery } from "@/lib/gallery-auth";
+import { canUsePrivateDashboard } from "@/lib/gallery-auth";
 import { getAppleCalendarEvents } from "@/lib/apple-calendar";
 
 export async function GET() {
-  if (!(await canManageGallery())) {
+  if (!(await canUsePrivateDashboard())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

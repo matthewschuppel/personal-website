@@ -3,7 +3,6 @@ import { LockKeyhole } from "lucide-react";
 import { siteConfig } from "@/data/site";
 
 const navItems = [
-  { label: "Home", href: "/" },
   { label: "About", href: "/about" },
   { label: "Resume", href: "/resume" },
   { label: "Gallery", href: "/gallery" },

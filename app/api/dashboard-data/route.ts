@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { canManageGallery } from "@/lib/gallery-auth";
+import { canUsePrivateDashboard } from "@/lib/gallery-auth";
 import {
   readDashboardState,
   writeDashboardState,
@@ -7,7 +7,7 @@ import {
 } from "@/lib/dashboard-r2";
 
 export async function GET() {
-  if (!(await canManageGallery())) {
+  if (!(await canUsePrivateDashboard())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -16,7 +16,7 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  if (!(await canManageGallery())) {
+  if (!(await canUsePrivateDashboard())) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
