@@ -5,6 +5,8 @@ import {
   BriefcaseBusiness,
   CalendarDays,
   CheckSquare,
+  Clock,
+  CloudSun,
   ClipboardList,
   Download,
   FileText,
@@ -64,6 +66,14 @@ type SearchResult = {
   id: string;
   source: string;
   text: string;
+};
+
+type WeatherState = {
+  temperature: number | null;
+  condition: string;
+  windSpeed: number | null;
+  location: string;
+  status: "loading" | "ready" | "unavailable";
 };
 
 const STORAGE_KEY = "personal-os-dashboard-v1";
@@ -230,6 +240,38 @@ function searchDashboard(
     .slice(0, 6);
 }
 
+function describeWeather(code: number) {
+  if (code === 0) {
+    return "Clear";
+  }
+
+  if ([1, 2, 3].includes(code)) {
+    return "Partly cloudy";
+  }
+
+  if ([45, 48].includes(code)) {
+    return "Fog";
+  }
+
+  if ([51, 53, 55, 56, 57].includes(code)) {
+    return "Drizzle";
+  }
+
+  if ([61, 63, 65, 66, 67, 80, 81, 82].includes(code)) {
+    return "Rain";
+  }
+
+  if ([71, 73, 75, 77, 85, 86].includes(code)) {
+    return "Snow";
+  }
+
+  if ([95, 96, 99].includes(code)) {
+    return "Storms";
+  }
+
+  return "Weather";
+}
+
 function Field({
   label,
   value,
@@ -274,6 +316,14 @@ export function EditableDashboard() {
   const [calendarEvents, setCalendarEvents] = useState<AppleCalendarEvent[]>([]);
   const [smartInput, setSmartInput] = useState("");
   const [smartStatus, setSmartStatus] = useState("Ready");
+  const [now, setNow] = useState(() => new Date());
+  const [weather, setWeather] = useState<WeatherState>({
+    temperature: null,
+    condition: "Loading",
+    windSpeed: null,
+    location: "Local weather",
+    status: "loading"
+  });
 
   useEffect(() => {
     let isActive = true;
@@ -310,6 +360,86 @@ export function EditableDashboard() {
           setIsLoaded(true);
         }
       });
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    function loadWeather(latitude: number, longitude: number, location: string) {
+      const params = new URLSearchParams({
+        latitude: String(latitude),
+        longitude: String(longitude),
+        current_weather: "true",
+        temperature_unit: "fahrenheit",
+        windspeed_unit: "mph",
+        timezone: "auto"
+      });
+
+      fetch(`https://api.open-meteo.com/v1/forecast?${params.toString()}`)
+        .then((response) => {
+          if (!response.ok) {
+            throw new Error("Weather unavailable");
+          }
+
+          return response.json() as Promise<{
+            current_weather?: {
+              temperature?: number;
+              windspeed?: number;
+              weathercode?: number;
+            };
+          }>;
+        })
+        .then((data) => {
+          if (!isActive) {
+            return;
+          }
+
+          const currentWeather = data.current_weather;
+
+          setWeather({
+            temperature:
+              typeof currentWeather?.temperature === "number"
+                ? Math.round(currentWeather.temperature)
+                : null,
+            condition:
+              typeof currentWeather?.weathercode === "number"
+                ? describeWeather(currentWeather.weathercode)
+                : "Weather",
+            windSpeed:
+              typeof currentWeather?.windspeed === "number"
+                ? Math.round(currentWeather.windspeed)
+                : null,
+            location,
+            status: "ready"
+          });
+        })
+        .catch(() => {
+          if (isActive) {
+            setWeather((current) => ({ ...current, condition: "Unavailable", status: "unavailable" }));
+          }
+        });
+    }
+
+    if ("geolocation" in navigator) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          loadWeather(position.coords.latitude, position.coords.longitude, "Current location");
+        },
+        () => loadWeather(41.8781, -87.6298, "Chicago"),
+        { timeout: 6000, maximumAge: 30 * 60 * 1000 }
+      );
+    } else {
+      loadWeather(41.8781, -87.6298, "Chicago");
+    }
 
     return () => {
       isActive = false;
@@ -532,6 +662,16 @@ export function EditableDashboard() {
     }).format(new Date(value));
   }
 
+  const formattedDate = new Intl.DateTimeFormat(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric"
+  }).format(now);
+  const formattedTime = new Intl.DateTimeFormat(undefined, {
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(now);
+
   return (
     <>
       <section className="mt-6 rounded-lg border border-ink/10 bg-white p-4 shadow-sm">
@@ -570,6 +710,51 @@ export function EditableDashboard() {
             </button>
           </div>
         </div>
+      </section>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-3">
+        <article className="rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
+              <CalendarDays size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">Today</p>
+              <p className="mt-1 text-lg font-semibold text-ink">{formattedDate}</p>
+            </div>
+          </div>
+        </article>
+        <article className="rounded-lg border border-ink/10 bg-ink p-5 text-paper shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-paper/10 text-amber">
+              <Clock size={20} aria-hidden="true" />
+            </span>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-paper/50">Time</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">{formattedTime}</p>
+            </div>
+          </div>
+        </article>
+        <article className="rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <span className="grid size-10 place-items-center rounded-md bg-mist text-clay">
+              <CloudSun size={20} aria-hidden="true" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-ink/45">
+                {weather.location}
+              </p>
+              <p className="mt-1 truncate text-lg font-semibold text-ink">
+                {weather.status === "loading"
+                  ? "Loading"
+                  : `${weather.temperature ?? "--"}°F · ${weather.condition}`}
+              </p>
+              {weather.windSpeed !== null ? (
+                <p className="mt-1 text-sm text-ink/55">{weather.windSpeed} mph wind</p>
+              ) : null}
+            </div>
+          </div>
+        </article>
       </section>
 
       <section className="mt-6 rounded-lg border border-ink/10 bg-white p-5 shadow-sm">
