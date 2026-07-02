@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@opennextjs/cloudflare':
+        specifier: ^1.6.0
+        version: 1.20.1(next@15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(wrangler@4.106.0)
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.7)
@@ -24,9 +27,6 @@ importers:
       '@eslint/eslintrc':
         specifier: ^3.3.5
         version: 3.3.5
-      '@opennextjs/cloudflare':
-        specifier: ^1.6.0
-        version: 1.20.1(next@15.5.19(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(wrangler@4.106.0)
       '@types/node':
         specifier: ^22.10.2
         version: 22.20.0

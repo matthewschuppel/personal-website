@@ -17,7 +17,16 @@ Set `DASHBOARD_PASSWORD` in `.env.local`, then visit `/dashboard`.
 - Personal details: `data/site.ts`
 - Dashboard placeholders: `data/dashboard.ts`
 - Styling: `tailwind.config.ts` and `app/globals.css`
-- Public pages: `app/page.tsx`, `app/about/page.tsx`, `app/resume/page.tsx`, `app/contact/page.tsx`
+- Public pages: `app/page.tsx`, `app/about/page.tsx`, `app/resume/page.tsx`, `app/contact/page.tsx`, `app/gallery/page.tsx`
+
+## Gallery Storage
+
+The public Gallery page stores uploaded travel photos in Cloudflare R2. The current binding expects
+an R2 bucket named `mws-gallery` in `wrangler.jsonc`.
+
+Before deploying, create that bucket in Cloudflare R2 or change `bucket_name` in `wrangler.jsonc` to
+match the bucket you already created. Uploading, editing, and deleting photos is available only when
+you are logged into `/dashboard`; public visitors can view the gallery.
 
 ## Deploy To Cloudflare
 
@@ -41,8 +50,9 @@ Before deploy:
    ```
 
 2. Update `NEXT_PUBLIC_SITE_URL` in `wrangler.jsonc`.
-3. Update the Cloudflare project name in `wrangler.jsonc` if desired.
-4. Deploy with `pnpm cf:deploy`.
+3. Create the R2 bucket named in `wrangler.jsonc` under `r2_buckets`.
+4. Update the Cloudflare project name in `wrangler.jsonc` if desired.
+5. Deploy with `pnpm cf:deploy`.
 
 ## Custom Domain On Cloudflare
 

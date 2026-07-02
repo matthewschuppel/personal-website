@@ -11,6 +11,12 @@
   "observability": {
     "enabled": true
   },
+  "r2_buckets": [
+    {
+      "binding": "GALLERY_BUCKET",
+      "bucket_name": "mws-gallery"
+    }
+  ],
   "routes": [
     {
       "pattern": "matthewschuppel.com/*",
