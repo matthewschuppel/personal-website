@@ -58,6 +58,7 @@ export type MockDocument = {
   category: DashboardSectionKey | "Career";
   type: string;
   updatedAt: string;
+  owner: string;
 };
 
 export type MockTrip = {
@@ -81,6 +82,21 @@ export type MockBookmark = {
   title: string;
   category: DashboardSectionKey;
   url: string;
+  description: string;
+};
+
+export type MockEvent = {
+  id: string;
+  title: string;
+  time: string;
+  calendar: "Personal" | "Work" | "Home" | "Wedding";
+};
+
+export type MockResource = {
+  id: string;
+  title: string;
+  detail: string;
+  status: string;
 };
 
 export type MockGalleryItem = {
@@ -122,6 +138,13 @@ export const quickActions = [
   "Add Bookmark"
 ];
 
+export const mockEvents: MockEvent[] = [
+  { id: "event-001", title: "Morning planning block", time: "8:30 AM", calendar: "Personal" },
+  { id: "event-002", title: "Project follow-up window", time: "1:00 PM", calendar: "Work" },
+  { id: "event-003", title: "Home maintenance review", time: "5:30 PM", calendar: "Home" },
+  { id: "event-004", title: "Wedding vendor comparison", time: "Sunday", calendar: "Wedding" }
+];
+
 export const mockTasks: MockTask[] = [
   {
     id: "task-001",
@@ -135,8 +158,8 @@ export const mockTasks: MockTask[] = [
     id: "task-002",
     title: "Collect appliance warranty PDFs",
     priority: "Medium",
-    status: "Next",
-    dueDate: "Friday",
+    status: "Today",
+    dueDate: "Today",
     area: "Home"
   },
   {
@@ -154,6 +177,22 @@ export const mockTasks: MockTask[] = [
     status: "Waiting",
     dueDate: "Next week",
     area: "Work"
+  },
+  {
+    id: "task-005",
+    title: "Add mortgage and insurance links",
+    priority: "Medium",
+    status: "Next",
+    dueDate: "Friday",
+    area: "Finance"
+  },
+  {
+    id: "task-006",
+    title: "Choose favorite gallery cover photos",
+    priority: "Low",
+    status: "Next",
+    dueDate: "Later",
+    area: "Photography"
   }
 ];
 
@@ -161,7 +200,7 @@ export const mockNotes: MockNote[] = [
   {
     id: "note-001",
     title: "Weekly reset notes",
-    summary: "A short checklist for reviewing calendar, tasks, documents, and errands.",
+    summary: "Review calendar, tasks, documents, errands, and anything that needs a decision.",
     tags: ["Planning", "Today"],
     updatedAt: "Today"
   },
@@ -178,6 +217,13 @@ export const mockNotes: MockNote[] = [
     summary: "Places worth shooting at sunrise, blue hour, or while traveling.",
     tags: ["Photography", "Travel"],
     updatedAt: "This week"
+  },
+  {
+    id: "note-004",
+    title: "Home annual maintenance rhythm",
+    summary: "Quarterly filters, annual inspection items, seasonal outdoor reminders.",
+    tags: ["Home", "Maintenance"],
+    updatedAt: "This month"
   }
 ];
 
@@ -195,14 +241,23 @@ export const mockTrips: MockTrip[] = [
     dates: "TBD",
     status: "Inspiration",
     detail: "Flight watchlist, lodging ideas, and photography locations."
+  },
+  {
+    id: "trip-003",
+    destination: "Wedding guest travel",
+    dates: "TBD",
+    status: "Research",
+    detail: "Room blocks, airport notes, rental car considerations, and guest FAQ."
   }
 ];
 
 export const mockDocuments: MockDocument[] = [
-  { id: "doc-001", title: "Resume PDF", category: "Career", type: "PDF", updatedAt: "Ready to upload" },
-  { id: "doc-002", title: "Insurance policies", category: "Finance", type: "Folder", updatedAt: "Mock data" },
-  { id: "doc-003", title: "Home warranty folder", category: "Home", type: "Folder", updatedAt: "Mock data" },
-  { id: "doc-004", title: "Travel confirmations", category: "Travel", type: "Folder", updatedAt: "Mock data" }
+  { id: "doc-001", title: "Resume PDF", category: "Career", type: "PDF", updatedAt: "Ready to upload", owner: "Matthew" },
+  { id: "doc-002", title: "Insurance policies", category: "Finance", type: "Folder", updatedAt: "Mock data", owner: "Matthew" },
+  { id: "doc-003", title: "Home warranty folder", category: "Home", type: "Folder", updatedAt: "Mock data", owner: "Matthew" },
+  { id: "doc-004", title: "Travel confirmations", category: "Travel", type: "Folder", updatedAt: "Mock data", owner: "Matthew" },
+  { id: "doc-005", title: "Wedding vendor contracts", category: "Wedding", type: "Folder", updatedAt: "Mock data", owner: "Matthew" },
+  { id: "doc-006", title: "Training certificates", category: "Work", type: "PDF", updatedAt: "Mock data", owner: "Matthew" }
 ];
 
 export const mockProjects: MockProject[] = [
@@ -226,13 +281,87 @@ export const mockProjects: MockProject[] = [
     area: "Work",
     status: "Planning",
     nextStep: "Group bookmarks, prompts, and training notes."
+  },
+  {
+    id: "project-004",
+    title: "Wedding planning command center",
+    area: "Wedding",
+    status: "Active",
+    nextStep: "Confirm vendor contact list and guest travel notes."
   }
 ];
 
 export const mockBookmarks: MockBookmark[] = [
-  { id: "bookmark-001", title: "Cloudflare dashboard", category: "Work", url: "https://dash.cloudflare.com" },
-  { id: "bookmark-002", title: "Mortgage portal", category: "Finance", url: "#" },
-  { id: "bookmark-003", title: "Recipe notebook", category: "Knowledge Library", url: "#" }
+  {
+    id: "bookmark-001",
+    title: "Cloudflare dashboard",
+    category: "Work",
+    url: "https://dash.cloudflare.com",
+    description: "Deployment, DNS, D1, R2, and Access controls."
+  },
+  {
+    id: "bookmark-002",
+    title: "Mortgage portal",
+    category: "Finance",
+    url: "#",
+    description: "Payment, escrow, and tax document reference."
+  },
+  {
+    id: "bookmark-003",
+    title: "Recipe notebook",
+    category: "Knowledge Library",
+    url: "#",
+    description: "Saved recipes, meal ideas, and favorite notes."
+  },
+  {
+    id: "bookmark-004",
+    title: "Photo editing workflow",
+    category: "Photography",
+    url: "#",
+    description: "Export settings, presets, and location notes."
+  }
+];
+
+export const homeResources: MockResource[] = [
+  { id: "home-001", title: "HVAC filter schedule", detail: "Replace filters quarterly and log dates.", status: "Next check: August" },
+  { id: "home-002", title: "Appliance manuals", detail: "Washer, dryer, dishwasher, fridge, and HVAC references.", status: "Collecting PDFs" },
+  { id: "home-003", title: "Property tax documents", detail: "Annual statements and exemption reminders.", status: "Folder ready" },
+  { id: "home-004", title: "Insurance links", detail: "Home, auto, and personal policy portals.", status: "Bookmark list" }
+];
+
+export const workResources: MockResource[] = [
+  { id: "work-001", title: "Clinical trial resource hub", detail: "Study notes, training references, and useful templates.", status: "Planning" },
+  { id: "work-002", title: "AI prompt library", detail: "Reusable prompts for summaries, outlines, and documentation.", status: "Active" },
+  { id: "work-003", title: "Presentation templates", detail: "Slide structures, talking points, and visual standards.", status: "Drafting" },
+  { id: "work-004", title: "Meeting notes", detail: "Weekly project notes and follow-up actions.", status: "Ongoing" }
+];
+
+export const photographyResources: MockResource[] = [
+  { id: "photo-001", title: "Camera gear", detail: "Bodies, lenses, bags, batteries, and accessories.", status: "Inventory" },
+  { id: "photo-002", title: "Editing workflow", detail: "Import, select, color, export, archive.", status: "Draft" },
+  { id: "photo-003", title: "Shooting locations", detail: "Dallas spots, travel scenes, and favorite light.", status: "Growing list" },
+  { id: "photo-004", title: "Favorite photos", detail: "Shortlist for future public gallery albums.", status: "Needs review" }
+];
+
+export const weddingResources: MockResource[] = [
+  { id: "wedding-001", title: "Wedding timeline", detail: "Major decisions, deadlines, and month-by-month reminders.", status: "Active" },
+  { id: "wedding-002", title: "Vendor contacts", detail: "Planner, venue, photo, video, floral, music, and lodging.", status: "Collecting" },
+  { id: "wedding-003", title: "Guest information", detail: "Guest list notes, travel details, and communication items.", status: "Draft" },
+  { id: "wedding-004", title: "Photo gallery placeholder", detail: "Future private wedding album storage in R2.", status: "Placeholder" }
+];
+
+export const financeResources: MockResource[] = [
+  { id: "finance-001", title: "Monthly budget links", detail: "Budget sheet, recurring bills, and review notes.", status: "Monthly" },
+  { id: "finance-002", title: "Tax documents", detail: "W-2s, deductions, property tax, and filing checklist.", status: "Annual" },
+  { id: "finance-003", title: "Mortgage information", detail: "Portal, payment notes, escrow, and statements.", status: "Reference" },
+  { id: "finance-004", title: "Investment links", detail: "Account portals and long-term planning references.", status: "Reference" }
+];
+
+export const knowledgeResources: MockResource[] = [
+  { id: "knowledge-001", title: "Articles", detail: "Saved reading with tags and summaries.", status: "Library" },
+  { id: "knowledge-002", title: "Recipes", detail: "Meals, favorites, and notes for future repeats.", status: "Library" },
+  { id: "knowledge-003", title: "Ideas", detail: "Loose concepts, project sparks, and personal systems thoughts.", status: "Inbox" },
+  { id: "knowledge-004", title: "AI conversations", detail: "Useful outputs, prompts, and decisions to preserve.", status: "Archive" }
 ];
 
 export const mockGalleryItems: MockGalleryItem[] = [

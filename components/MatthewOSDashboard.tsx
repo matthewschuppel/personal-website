@@ -1,35 +1,46 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import type { FormEvent, ReactNode } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   ArrowUpRight,
+  Check,
   Command,
-  Database,
   FilePlus2,
-  FolderOpen,
   Plus,
   Search,
+  Trash2,
   UploadCloud
 } from "lucide-react";
 import {
+  financeResources,
   featureSections,
+  homeResources,
+  knowledgeResources,
   mockBookmarks,
   mockDocuments,
+  mockEvents,
+  mockGalleryItems,
   mockNotes,
   mockProjects,
   mockTasks,
   mockTrips,
   osNavigation,
+  photographyResources,
   quickActions,
+  weddingResources,
+  workResources,
   type DashboardSectionKey,
-  type FeatureSection
+  type FeatureSection,
+  type MockBookmark,
+  type MockDocument,
+  type MockEvent,
+  type MockNote,
+  type MockProject,
+  type MockResource,
+  type MockTask,
+  type MockTrip
 } from "@/data/matthewos";
-import type { StoredDashboardState } from "@/lib/dashboard-r2";
-
-type DashboardDataResponse = {
-  state: StoredDashboardState;
-};
 
 type DatabaseCardProps = {
   title: string;
@@ -38,12 +49,16 @@ type DatabaseCardProps = {
   children?: ReactNode;
 };
 
-const defaultUserSections = [
-  { title: "Today", items: ["Morning review", "Calendar scan", "Top three priorities"] },
-  { title: "Tasks", items: mockTasks.map((task) => task.title) },
-  { title: "Notes", items: mockNotes.map((note) => note.title) },
-  { title: "Calendar", items: ["9:00 AM Focus block", "2:00 PM Follow-up window"] }
-];
+type ComposerMode = "note" | "task" | "document" | "trip" | "project" | "bookmark";
+
+const composerLabels: Record<ComposerMode, string> = {
+  note: "New Note",
+  task: "New Task",
+  document: "Upload Document",
+  trip: "Add Trip",
+  project: "Add Home Project",
+  bookmark: "Add Bookmark"
+};
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -72,6 +87,32 @@ function getDateLabel() {
   }).format(new Date());
 }
 
+function classifyCapture(value: string): ComposerMode {
+  const text = value.toLowerCase();
+
+  if (text.includes("task") || text.includes("todo") || text.includes("call") || text.includes("follow up")) {
+    return "task";
+  }
+
+  if (text.includes("trip") || text.includes("flight") || text.includes("hotel") || text.includes("travel")) {
+    return "trip";
+  }
+
+  if (text.includes("upload") || text.includes("pdf") || text.includes("document") || text.includes("file")) {
+    return "document";
+  }
+
+  if (text.includes("http") || text.includes("link") || text.includes("bookmark")) {
+    return "bookmark";
+  }
+
+  if (text.includes("project") || text.includes("home")) {
+    return "project";
+  }
+
+  return "note";
+}
+
 function DatabaseCard({ title, eyebrow, meta, children }: DatabaseCardProps) {
   return (
     <article className="rounded-xl border border-stone-200/80 bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-stone-800 dark:bg-stone-900">
@@ -95,14 +136,6 @@ function DatabaseCard({ title, eyebrow, meta, children }: DatabaseCardProps) {
   );
 }
 
-function EmptyState({ label }: { label: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-stone-300 bg-stone-50 p-5 text-sm text-stone-500 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-400">
-      {label} is ready for real data once D1, R2, and Cloudflare Access are connected.
-    </div>
-  );
-}
-
 function StatusPill({ children }: { children: ReactNode }) {
   return (
     <span className="rounded-md bg-stone-100 px-2.5 py-1 text-xs font-semibold text-stone-600 dark:bg-stone-800 dark:text-stone-300">
@@ -111,123 +144,27 @@ function StatusPill({ children }: { children: ReactNode }) {
   );
 }
 
-function SectionPanel({ section }: { section: FeatureSection }) {
-  const documents = mockDocuments.filter((document) => document.category === section.title);
-  const projects = mockProjects.filter((project) => project.area === section.title);
-  const bookmarks = mockBookmarks.filter((bookmark) => bookmark.category === section.title);
-
+function SectionHeader({ section }: { section: FeatureSection }) {
   return (
-    <section className="space-y-5">
-      <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-800 dark:bg-stone-900">
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">MatthewOS Database</p>
-        <h2 className="mt-3 text-3xl font-semibold tracking-tight text-stone-950 dark:text-stone-50">
-          {section.title}
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">
-          {section.description}
-        </p>
-      </div>
+    <div className="rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">MatthewOS Database</p>
+      <h2 className="mt-3 text-3xl font-semibold tracking-tight text-stone-950 dark:text-stone-50">
+        {section.title}
+      </h2>
+      <p className="mt-3 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">{section.description}</p>
+    </div>
+  );
+}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
-        <DatabaseCard title="Section Contents" eyebrow="Scaffold">
-          <ul className="space-y-2">
-            {section.items.map((item) => (
-              <li key={item} className="rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-950">
-                {item}
-              </li>
-            ))}
-          </ul>
+function ResourceGrid({ resources }: { resources: MockResource[] }) {
+  return (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {resources.map((resource) => (
+        <DatabaseCard key={resource.id} title={resource.title} eyebrow="Resource" meta={resource.status}>
+          {resource.detail}
         </DatabaseCard>
-        <DatabaseCard title="Future Data Source" eyebrow="D1 + R2">
-          {/* Future database integration: load structured rows from D1 and attach file/media keys from R2. */}
-          Public pages never read from this private section. Cloudflare Access should protect
-          /dashboard before real personal data is added.
-        </DatabaseCard>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {section.title === "Notes"
-          ? mockNotes.map((note) => (
-              <DatabaseCard key={note.id} title={note.title} eyebrow="Note" meta={note.updatedAt}>
-                <p>{note.summary}</p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {note.tags.map((tag) => (
-                    <StatusPill key={tag}>{tag}</StatusPill>
-                  ))}
-                </div>
-              </DatabaseCard>
-            ))
-          : null}
-
-        {section.title === "Tasks"
-          ? mockTasks.map((task) => (
-              <DatabaseCard key={task.id} title={task.title} eyebrow={task.area} meta={task.status}>
-                <div className="flex flex-wrap gap-2">
-                  <StatusPill>{task.priority}</StatusPill>
-                  <StatusPill>{task.dueDate}</StatusPill>
-                </div>
-              </DatabaseCard>
-            ))
-          : null}
-
-        {section.title === "Calendar" ? (
-          <DatabaseCard title="Upcoming Events" eyebrow="Calendar">
-            {/* Future calendar integration: connect Apple Calendar, Google Calendar, or a D1 events table here. */}
-            <ul className="space-y-2">
-              <li>9:00 AM Focus block</li>
-              <li>2:00 PM Follow-up window</li>
-              <li>Friday planning review</li>
-            </ul>
-          </DatabaseCard>
-        ) : null}
-
-        {section.title === "Documents"
-          ? mockDocuments.map((document) => (
-              <DatabaseCard key={document.id} title={document.title} eyebrow={document.category} meta={document.type}>
-                {document.updatedAt}
-              </DatabaseCard>
-            ))
-          : null}
-
-        {section.title === "Travel"
-          ? mockTrips.map((trip) => (
-              <DatabaseCard key={trip.id} title={trip.destination} eyebrow={trip.status} meta={trip.dates}>
-                {trip.detail}
-              </DatabaseCard>
-            ))
-          : null}
-
-        {projects.map((project) => (
-          <DatabaseCard key={project.id} title={project.title} eyebrow={project.area} meta={project.status}>
-            {project.nextStep}
-          </DatabaseCard>
-        ))}
-
-        {bookmarks.map((bookmark) => (
-          <DatabaseCard key={bookmark.id} title={bookmark.title} eyebrow="Bookmark">
-            <a href={bookmark.url} className="inline-flex items-center gap-2 font-semibold text-stone-950 dark:text-stone-50">
-              Open link
-              <ArrowUpRight size={14} aria-hidden="true" />
-            </a>
-          </DatabaseCard>
-        ))}
-
-        {section.title === "Settings" ? (
-          <>
-            <DatabaseCard title="Profile" eyebrow="Placeholder">
-              Name, timezone, location, and dashboard preferences will live here later.
-            </DatabaseCard>
-            <DatabaseCard title="Integrations" eyebrow="Placeholder">
-              Future controls for calendar, AI search, D1 databases, R2 buckets, and notification services.
-            </DatabaseCard>
-          </>
-        ) : null}
-      </div>
-
-      {!documents.length && !projects.length && !bookmarks.length && !["Notes", "Tasks", "Calendar", "Documents", "Travel", "Settings"].includes(section.title) ? (
-        <EmptyState label={section.title} />
-      ) : null}
-    </section>
+      ))}
+    </div>
   );
 }
 
@@ -235,58 +172,353 @@ export function MatthewOSDashboard() {
   const [activeSection, setActiveSection] = useState<DashboardSectionKey>("Today");
   const [query, setQuery] = useState("");
   const [capture, setCapture] = useState("");
-  const [userState, setUserState] = useState<StoredDashboardState>({
-    metrics: [],
-    plans: [],
-    sections: defaultUserSections
-  });
+  const [composerMode, setComposerMode] = useState<ComposerMode>("note");
+  const captureInputRef = useRef<HTMLInputElement>(null);
+  const [notes, setNotes] = useState<MockNote[]>(mockNotes);
+  const [tasks, setTasks] = useState<MockTask[]>(mockTasks);
+  const [documents, setDocuments] = useState<MockDocument[]>(mockDocuments);
+  const [trips, setTrips] = useState<MockTrip[]>(mockTrips);
+  const [projects, setProjects] = useState<MockProject[]>(mockProjects);
+  const [bookmarks, setBookmarks] = useState<MockBookmark[]>(mockBookmarks);
+  const [events] = useState<MockEvent[]>(mockEvents);
+  const [activity, setActivity] = useState("Demo mode: changes update this screen locally.");
 
-  useEffect(() => {
-    // Future auth/database integration: this endpoint should run behind Cloudflare Access and can move to D1.
-    fetch("/api/dashboard-data")
-      .then((response) => response.json() as Promise<DashboardDataResponse>)
-      .then((data) => setUserState(data.state))
-      .catch(() => {
-        // Keep the local mock fallback if Cloudflare runtime bindings are unavailable in development.
-      });
-  }, []);
-
-  const todayTasks = useMemo(() => mockTasks.filter((task) => task.status === "Today").slice(0, 3), []);
-  const recentNotes = useMemo(() => mockNotes.slice(0, 3), []);
-  const todayEvents = useMemo(() => {
-    const calendarSection = userState.sections.find((section) => section.title.toLowerCase() === "calendar");
-    return (calendarSection?.items ?? ["9:00 AM Focus block", "2:00 PM Follow-up window"]).slice(0, 3);
-  }, [userState.sections]);
   const activeFeature = featureSections.find((section) => section.title === activeSection);
-  const filteredSections = featureSections.filter((section) =>
-    `${section.title} ${section.description} ${section.items.join(" ")}`.toLowerCase().includes(query.toLowerCase())
-  );
+  const todayTasks = tasks.filter((task) => task.status === "Today").slice(0, 3);
+  const recentNotes = notes.slice(0, 3);
+  const searchResults = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
 
-  async function captureItem(targetSection = "Notes") {
-    const item = capture.trim();
+    if (!normalizedQuery) {
+      return [];
+    }
 
-    if (!item) {
+    return [
+      ...notes.map((item) => ({ type: "Note", title: item.title, detail: item.summary })),
+      ...tasks.map((item) => ({ type: "Task", title: item.title, detail: `${item.area} / ${item.status}` })),
+      ...documents.map((item) => ({ type: "Document", title: item.title, detail: `${item.category} / ${item.type}` })),
+      ...trips.map((item) => ({ type: "Trip", title: item.destination, detail: item.detail })),
+      ...bookmarks.map((item) => ({ type: "Bookmark", title: item.title, detail: item.description }))
+    ]
+      .filter((item) => `${item.type} ${item.title} ${item.detail}`.toLowerCase().includes(normalizedQuery))
+      .slice(0, 8);
+  }, [bookmarks, documents, notes, query, tasks, trips]);
+
+  function openComposer(mode: ComposerMode, preset = "") {
+    setComposerMode(mode);
+    setCapture(preset);
+  }
+
+  function saveCapture() {
+    const value = (captureInputRef.current?.value ?? capture).trim();
+
+    if (!value) {
+      setActivity("Type something first, then save it into MatthewOS.");
       return;
     }
 
-    const nextState = {
-      ...userState,
-      sections: userState.sections.some((section) => section.title === targetSection)
-        ? userState.sections.map((section) =>
-            section.title === targetSection ? { ...section, items: [item, ...section.items] } : section
-          )
-        : [...userState.sections, { title: targetSection, items: [item] }]
-    };
+    const mode = composerMode === "note" ? classifyCapture(value) : composerMode;
+    const id = `${mode}-${Date.now()}`;
 
-    setUserState(nextState);
+    if (mode === "task") {
+      setTasks((current) => [
+        {
+          id,
+          title: value,
+          priority: "Medium",
+          status: "Today",
+          dueDate: "Today",
+          area: "Today"
+        },
+        ...current
+      ]);
+      setActiveSection("Tasks");
+    }
+
+    if (mode === "note") {
+      setNotes((current) => [
+        {
+          id,
+          title: value,
+          summary: "Captured from the MatthewOS quick add demo.",
+          tags: ["Inbox"],
+          updatedAt: "Just now"
+        },
+        ...current
+      ]);
+      setActiveSection("Notes");
+    }
+
+    if (mode === "document") {
+      setDocuments((current) => [
+        {
+          id,
+          title: value,
+          category: "Documents",
+          type: "Upload placeholder",
+          updatedAt: "Just now",
+          owner: "Matthew"
+        },
+        ...current
+      ]);
+      setActiveSection("Documents");
+    }
+
+    if (mode === "trip") {
+      setTrips((current) => [
+        {
+          id,
+          destination: value,
+          dates: "TBD",
+          status: "Idea",
+          detail: "Captured trip idea ready for dates, flights, hotel, and itinerary notes."
+        },
+        ...current
+      ]);
+      setActiveSection("Travel");
+    }
+
+    if (mode === "project") {
+      setProjects((current) => [
+        {
+          id,
+          title: value,
+          area: "Home",
+          status: "New",
+          nextStep: "Define the next action and attach supporting documents."
+        },
+        ...current
+      ]);
+      setActiveSection("Home");
+    }
+
+    if (mode === "bookmark") {
+      setBookmarks((current) => [
+        {
+          id,
+          title: value,
+          category: "Knowledge Library",
+          url: value.startsWith("http") ? value : "#",
+          description: "Captured bookmark ready for a URL, tags, and summary."
+        },
+        ...current
+      ]);
+      setActiveSection("Knowledge Library");
+    }
+
     setCapture("");
+    if (captureInputRef.current) {
+      captureInputRef.current.value = "";
+    }
+    setComposerMode("note");
+    setActivity(`Saved "${value}" as ${composerLabels[mode].toLowerCase()}.`);
+    // Future persistence: replace the local state update with D1 inserts and R2 upload flows.
+  }
 
-    // Future AI integration: classify capture text, extract dates, assign labels, then save to D1/R2.
-    await fetch("/api/dashboard-data", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ state: nextState })
-    }).catch(() => undefined);
+  function handleComposerSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    saveCapture();
+  }
+
+  function completeTask(id: string) {
+    setTasks((current) => current.map((task) => (task.id === id ? { ...task, status: "Done" } : task)));
+    setActivity("Task marked done in the demo state.");
+  }
+
+  function deleteTask(id: string) {
+    setTasks((current) => current.filter((task) => task.id !== id));
+    setActivity("Task removed from the demo state.");
+  }
+
+  function renderTasks() {
+    return (
+      <div className="space-y-3">
+        {tasks.map((task) => (
+          <div
+            key={task.id}
+            className="flex flex-col gap-3 rounded-xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-800 dark:bg-stone-900 sm:flex-row sm:items-center sm:justify-between"
+          >
+            <div>
+              <p className={`font-semibold ${task.status === "Done" ? "text-stone-400 line-through" : "text-stone-950 dark:text-stone-50"}`}>
+                {task.title}
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <StatusPill>{task.priority}</StatusPill>
+                <StatusPill>{task.status}</StatusPill>
+                <StatusPill>{task.dueDate}</StatusPill>
+                <StatusPill>{task.area}</StatusPill>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => completeTask(task.id)}
+                className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
+              >
+                <Check size={15} aria-hidden="true" />
+                Done
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteTask(task.id)}
+                className="inline-flex items-center gap-2 rounded-lg border border-stone-200 px-3 py-2 text-sm font-semibold text-stone-600 hover:bg-stone-50 dark:border-stone-800 dark:text-stone-300 dark:hover:bg-stone-900"
+              >
+                <Trash2 size={15} aria-hidden="true" />
+                Remove
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  function renderSectionContent(section: FeatureSection) {
+    if (section.title === "Notes") {
+      return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {notes.map((note) => (
+            <DatabaseCard key={note.id} title={note.title} eyebrow="Note" meta={note.updatedAt}>
+              <p>{note.summary}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {note.tags.map((tag) => (
+                  <StatusPill key={tag}>{tag}</StatusPill>
+                ))}
+              </div>
+            </DatabaseCard>
+          ))}
+        </div>
+      );
+    }
+
+    if (section.title === "Tasks") {
+      return renderTasks();
+    }
+
+    if (section.title === "Calendar") {
+      return (
+        <div className="grid gap-4 md:grid-cols-2">
+          {events.map((event) => (
+            <DatabaseCard key={event.id} title={event.title} eyebrow={event.calendar} meta={event.time}>
+              Calendar preview data. Future integration can pull Apple or Google events into this same shape.
+            </DatabaseCard>
+          ))}
+        </div>
+      );
+    }
+
+    if (section.title === "Documents") {
+      return (
+        <div className="space-y-3">
+          {documents.map((document) => (
+            <div
+              key={document.id}
+              className="grid gap-3 rounded-xl border border-stone-200 bg-white p-4 text-sm shadow-sm dark:border-stone-800 dark:bg-stone-900 md:grid-cols-[1.4fr_0.8fr_0.6fr_0.7fr]"
+            >
+              <p className="font-semibold text-stone-950 dark:text-stone-50">{document.title}</p>
+              <p>{document.category}</p>
+              <p>{document.type}</p>
+              <p>{document.updatedAt}</p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    if (section.title === "Travel") {
+      return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {trips.map((trip) => (
+            <DatabaseCard key={trip.id} title={trip.destination} eyebrow={trip.status} meta={trip.dates}>
+              {trip.detail}
+            </DatabaseCard>
+          ))}
+        </div>
+      );
+    }
+
+    if (section.title === "Home") {
+      return (
+        <div className="space-y-5">
+          <ResourceGrid resources={homeResources} />
+          <ResourceGrid resources={projects.filter((project) => project.area === "Home").map((project) => ({
+            id: project.id,
+            title: project.title,
+            detail: project.nextStep,
+            status: project.status
+          }))} />
+        </div>
+      );
+    }
+
+    if (section.title === "Work") {
+      return <ResourceGrid resources={workResources} />;
+    }
+
+    if (section.title === "Photography") {
+      return (
+        <div className="space-y-5">
+          <ResourceGrid resources={photographyResources} />
+          <div className="grid gap-4 md:grid-cols-2">
+            {mockGalleryItems
+              .filter((item) => item.album === "Photography")
+              .map((item) => (
+                <DatabaseCard key={item.id} title={item.title} eyebrow={item.album} meta={item.location}>
+                  Future favorite photos can live in R2 and display here.
+                </DatabaseCard>
+              ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (section.title === "Wedding") {
+      return (
+        <div className="space-y-5">
+          <ResourceGrid resources={weddingResources} />
+          <ResourceGrid resources={projects.filter((project) => project.area === "Wedding").map((project) => ({
+            id: project.id,
+            title: project.title,
+            detail: project.nextStep,
+            status: project.status
+          }))} />
+        </div>
+      );
+    }
+
+    if (section.title === "Finance") {
+      return <ResourceGrid resources={financeResources} />;
+    }
+
+    if (section.title === "Knowledge Library") {
+      return (
+        <div className="space-y-5">
+          <ResourceGrid resources={knowledgeResources} />
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {bookmarks.map((bookmark) => (
+              <DatabaseCard key={bookmark.id} title={bookmark.title} eyebrow={bookmark.category}>
+                <p>{bookmark.description}</p>
+                <a href={bookmark.url} className="mt-3 inline-flex items-center gap-2 font-semibold text-stone-950 dark:text-stone-50">
+                  Open link
+                  <ArrowUpRight size={14} aria-hidden="true" />
+                </a>
+              </DatabaseCard>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <DatabaseCard title="Profile" eyebrow="Settings">
+          Matthew, Dallas, Central time, neutral interface, private dashboard first.
+        </DatabaseCard>
+        <DatabaseCard title="Integrations" eyebrow="Future">
+          Cloudflare Access, D1, R2, Apple Calendar, weather, AI search, and document analysis.
+        </DatabaseCard>
+      </div>
+    );
   }
 
   return (
@@ -297,7 +529,7 @@ export function MatthewOSDashboard() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Private</p>
             <h1 className="mt-2 text-2xl font-semibold tracking-tight">MatthewOS</h1>
             <p className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
-              A private personal operating system prepared for Cloudflare Access, D1, and R2.
+              Interactive demo mode with mock data. D1 and R2 persistence can be wired into these same views.
             </p>
           </div>
           <nav className="mt-4 grid gap-1">
@@ -331,7 +563,7 @@ export function MatthewOSDashboard() {
                 <input
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search MatthewOS..."
+                  placeholder="Search notes, tasks, documents, trips, and links..."
                   className="w-full rounded-xl border border-stone-200 bg-white py-3 pl-10 pr-4 text-sm outline-none transition focus:border-stone-400 focus:ring-4 focus:ring-stone-200 dark:border-stone-800 dark:bg-stone-900 dark:focus:ring-stone-800"
                 />
               </label>
@@ -341,47 +573,77 @@ export function MatthewOSDashboard() {
               </button>
             </div>
 
+            {searchResults.length ? (
+              <section className="mt-4 rounded-2xl border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-stone-400">Search Results</p>
+                <div className="mt-3 grid gap-2 md:grid-cols-2">
+                  {searchResults.map((result) => (
+                    <button
+                      key={`${result.type}-${result.title}`}
+                      type="button"
+                      className="rounded-lg bg-stone-50 p-3 text-left text-sm hover:bg-stone-100 dark:bg-stone-950 dark:hover:bg-stone-800"
+                    >
+                      <span className="font-semibold text-stone-950 dark:text-stone-50">{result.title}</span>
+                      <span className="mt-1 block text-stone-500">{result.type} / {result.detail}</span>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
+            <section className="mt-5 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
+              <form onSubmit={handleComposerSubmit} className="grid gap-3 lg:grid-cols-[190px_1fr_auto] lg:items-center">
+                <select
+                  value={composerMode}
+                  onChange={(event) => setComposerMode(event.target.value as ComposerMode)}
+                  className="rounded-xl border border-stone-200 bg-white px-3 py-3 text-sm font-semibold outline-none dark:border-stone-800 dark:bg-stone-950"
+                >
+                  {Object.entries(composerLabels).map(([value, label]) => (
+                    <option key={value} value={value}>{label}</option>
+                  ))}
+                </select>
+                <input
+                  ref={captureInputRef}
+                  value={capture}
+                  onChange={(event) => setCapture(event.target.value)}
+                  placeholder="Add a note, task, document, trip, project, or bookmark..."
+                  className="min-h-11 rounded-xl border border-stone-200 bg-white px-4 text-sm outline-none focus:border-stone-400 focus:ring-4 focus:ring-stone-200 dark:border-stone-800 dark:bg-stone-950 dark:focus:ring-stone-800"
+                />
+                <button
+                  type="submit"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white dark:bg-stone-50 dark:text-stone-950"
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Save
+                </button>
+              </form>
+              <p className="mt-3 text-sm text-stone-500">{activity}</p>
+            </section>
+
             {activeSection === "Today" ? (
               <>
                 <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-stone-800 dark:bg-stone-900">
                   <div className="grid gap-6 lg:grid-cols-[1fr_0.95fr]">
                     <div>
-                      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-400">
-                        Daily Brief
-                      </p>
+                      <p className="text-sm font-semibold uppercase tracking-[0.16em] text-stone-400">Daily Brief</p>
                       <h2 className="mt-3 text-4xl font-semibold tracking-tight sm:text-5xl">
                         {getGreeting()}, Matthew
                       </h2>
                       <div className="mt-4 flex flex-wrap gap-2">
                         <StatusPill>{getDateLabel()}</StatusPill>
-                        <StatusPill>Dallas, TX weather placeholder</StatusPill>
+                        <StatusPill>Dallas, TX / 78 F / clear placeholder</StatusPill>
+                        <StatusPill>{tasks.filter((task) => task.status !== "Done").length} open tasks</StatusPill>
                       </div>
                       <p className="mt-5 max-w-2xl text-sm leading-6 text-stone-600 dark:text-stone-300">
-                        Today has {todayEvents.length} calendar previews, {todayTasks.length} high-focus tasks,
-                        and {recentNotes.length} recent notes ready for review.
+                        Today has {events.slice(0, 3).length} events, {todayTasks.length} top tasks,
+                        {documents.length} document records, and {trips.length} trips in the planning system.
                       </p>
-                      <div className="mt-5 flex flex-col gap-2 sm:flex-row">
-                        <input
-                          value={capture}
-                          onChange={(event) => setCapture(event.target.value)}
-                          placeholder="Capture a note, task, bookmark, or idea..."
-                          className="min-h-11 flex-1 rounded-xl border border-stone-200 bg-white px-4 text-sm outline-none focus:border-stone-400 focus:ring-4 focus:ring-stone-200 dark:border-stone-800 dark:bg-stone-950 dark:focus:ring-stone-800"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => captureItem("Notes")}
-                          className="inline-flex items-center justify-center gap-2 rounded-xl bg-stone-950 px-4 py-3 text-sm font-semibold text-white dark:bg-stone-50 dark:text-stone-950"
-                        >
-                          <Plus size={16} aria-hidden="true" />
-                          Capture
-                        </button>
-                      </div>
                     </div>
                     <div className="grid gap-3">
                       <DatabaseCard title="Today's Calendar" eyebrow="Preview">
                         <ul className="space-y-2">
-                          {todayEvents.map((event) => (
-                            <li key={event}>{event}</li>
+                          {events.slice(0, 3).map((event) => (
+                            <li key={event.id}>{event.time} / {event.title}</li>
                           ))}
                         </ul>
                       </DatabaseCard>
@@ -401,63 +663,73 @@ export function MatthewOSDashboard() {
                     {recentNotes.map((note) => note.title).join(" / ")}
                   </DatabaseCard>
                   <DatabaseCard title="Upcoming Trips" eyebrow="Travel">
-                    {mockTrips.map((trip) => trip.destination).join(" / ")}
+                    {trips.map((trip) => trip.destination).join(" / ")}
                   </DatabaseCard>
                   <DatabaseCard title="Home Projects" eyebrow="Home">
-                    {mockProjects.filter((project) => project.area === "Home").map((project) => project.title).join(" / ")}
+                    {projects.filter((project) => project.area === "Home").map((project) => project.title).join(" / ")}
                   </DatabaseCard>
                   <DatabaseCard title="Recent Documents" eyebrow="Files">
-                    {mockDocuments.slice(0, 3).map((document) => document.title).join(" / ")}
+                    {documents.slice(0, 3).map((document) => document.title).join(" / ")}
                   </DatabaseCard>
-                  <DatabaseCard title="Universal Search" eyebrow="Scaffold">
-                    {/* Future search integration: index D1 rows, R2 object metadata, calendar events, and AI summaries. */}
-                    Search is currently mocked client-side and ready for a server-backed index later.
+                  <DatabaseCard title="Universal Search" eyebrow="Working Demo">
+                    Type into search to filter across notes, tasks, documents, trips, and bookmarks.
                   </DatabaseCard>
                   <DatabaseCard title="Command Palette" eyebrow="Cmd+K">
-                    Placeholder for actions, navigation, AI capture, upload flows, and shortcuts.
+                    Placeholder for keyboard-driven actions, AI capture, upload flows, and navigation.
                   </DatabaseCard>
                 </section>
 
                 <section className="mt-6 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm dark:border-stone-800 dark:bg-stone-900">
                   <div className="flex flex-wrap gap-2">
-                    {quickActions.map((action) => (
-                      <button
-                        key={action}
-                        type="button"
-                        onClick={() => setCapture(action)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-600 transition hover:bg-white dark:border-stone-800 dark:bg-stone-950 dark:text-stone-300"
-                      >
-                        {action.includes("Upload") ? <UploadCloud size={16} /> : <FilePlus2 size={16} />}
-                        {action}
-                      </button>
-                    ))}
+                    {quickActions.map((action) => {
+                      const mode = action === "New Task" ? "task" : action === "Upload Document" ? "document" : action === "Add Trip" ? "trip" : action === "Add Home Project" ? "project" : action === "Add Bookmark" ? "bookmark" : "note";
+
+                      return (
+                        <button
+                          key={action}
+                          type="button"
+                          onClick={() => openComposer(mode)}
+                          className="inline-flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 px-3 py-2 text-sm font-semibold text-stone-600 transition hover:bg-white dark:border-stone-800 dark:bg-stone-950 dark:text-stone-300"
+                        >
+                          {action.includes("Upload") ? <UploadCloud size={16} /> : <FilePlus2 size={16} />}
+                          {action}
+                        </button>
+                      );
+                    })}
                   </div>
                 </section>
 
                 <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {filteredSections.map((section) => (
-                    <DatabaseCard key={section.title} title={section.title} eyebrow="Section">
-                      {section.description}
-                    </DatabaseCard>
+                  {featureSections.map((section) => (
+                    <button key={section.title} type="button" onClick={() => setActiveSection(section.title)} className="text-left">
+                      <DatabaseCard title={section.title} eyebrow="Section">
+                        {section.description}
+                      </DatabaseCard>
+                    </button>
                   ))}
                 </section>
               </>
             ) : activeFeature ? (
-              <div className="mt-6">
-                <SectionPanel section={activeFeature} />
-              </div>
-            ) : (
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <DatabaseCard title="File Vault" eyebrow="Documents">
-                  <FolderOpen size={20} className="mb-3 text-stone-400" aria-hidden="true" />
-                  Document storage is prepared for R2-backed uploads, downloads, and deletes.
-                </DatabaseCard>
-                <DatabaseCard title="Database Ready" eyebrow="Cloudflare D1">
-                  <Database size={20} className="mb-3 text-stone-400" aria-hidden="true" />
-                  Structured dashboard data can move from local mock arrays into D1 tables.
-                </DatabaseCard>
-              </div>
-            )}
+              <section className="mt-6 space-y-5">
+                <SectionHeader section={activeFeature} />
+                <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+                  <DatabaseCard title="Section Contents" eyebrow="Scaffold">
+                    <ul className="space-y-2">
+                      {activeFeature.items.map((item) => (
+                        <li key={item} className="rounded-lg bg-stone-50 px-3 py-2 dark:bg-stone-950">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </DatabaseCard>
+                  <DatabaseCard title="Future Data Source" eyebrow="D1 + R2">
+                    Public pages never read from this private section. Cloudflare Access protects
+                    /dashboard, D1 stores structured rows, and R2 stores files and media.
+                  </DatabaseCard>
+                </div>
+                {renderSectionContent(activeFeature)}
+              </section>
+            ) : null}
           </div>
         </section>
       </div>
