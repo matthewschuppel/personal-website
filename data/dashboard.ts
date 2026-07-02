@@ -89,3 +89,7 @@ export const planningQueue = [
     text: "Chicago weekend: confirm hotel, dinner, parking, and packing list."
   }
 ];
+
+export type DashboardSection = (typeof dashboardSections)[number];
+export type DashboardMetric = (typeof todayMetrics)[number];
+export type DashboardPlan = (typeof planningQueue)[number];

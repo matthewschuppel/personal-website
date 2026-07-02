@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { LogOut } from "lucide-react";
 import { logout } from "@/app/dashboard/actions";
-import { DashboardCard } from "@/components/DashboardCard";
-import { dashboardSections, planningQueue, todayMetrics } from "@/data/dashboard";
+import { EditableDashboard } from "@/components/EditableDashboard";
 
 export const metadata: Metadata = {
   title: "Dashboard"
@@ -35,46 +34,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {todayMetrics.map((metric, index) => (
-          <article
-            key={metric.label}
-            className={`rounded-lg border border-ink/10 p-5 shadow-sm ${
-              index === 0 ? "bg-clay text-white" : "bg-white text-ink"
-            }`}
-          >
-            <p className={`text-sm ${index === 0 ? "text-white/72" : "text-ink/55"}`}>
-              {metric.label}
-            </p>
-            <p className="mt-2 text-4xl font-semibold">{metric.value}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        {planningQueue.map((item) => (
-          <article key={item.label} className="surface rounded-lg p-5">
-            <div className="flex items-center gap-3">
-              <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
-                <item.icon size={20} aria-hidden="true" />
-              </span>
-              <h2 className="text-lg font-semibold text-ink">{item.label}</h2>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-ink/65">{item.text}</p>
-          </article>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {dashboardSections.map((section) => (
-          <DashboardCard
-            key={section.title}
-            title={section.title}
-            icon={section.icon}
-            items={section.items}
-          />
-        ))}
-      </section>
+      <EditableDashboard />
     </main>
   );
 }
