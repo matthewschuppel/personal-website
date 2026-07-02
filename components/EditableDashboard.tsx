@@ -94,16 +94,141 @@ const iconMap = {
 };
 
 const categoryHints: Record<string, string[]> = {
-  Today: ["today", "now", "priority", "morning", "daily", "prep", "tonight", "urgent"],
-  Calendar: ["calendar", "meeting", "appointment", "schedule", "event", "call", "date", "time"],
-  Tasks: ["task", "todo", "send", "book", "buy", "finish", "renew", "call", "email", "pay"],
-  Notes: ["note", "idea", "remember", "thought", "question", "draft", "list", "journal"],
-  "Quick Links": ["link", "url", "website", "login", "portal", "app", "shortcut"],
-  Documents: ["document", "file", "pdf", "form", "paperwork", "tax", "resume", "contract"],
-  Travel: ["travel", "trip", "flight", "hotel", "packing", "itinerary", "passport", "vacation"],
-  Home: ["home", "house", "maintenance", "utility", "repair", "contractor", "clean", "garage"],
-  Wedding: ["wedding", "vendor", "guest", "venue", "registry", "budget", "timeline", "invite"],
-  "Work Resources": ["work", "job", "team", "template", "policy", "onboarding", "project", "client"]
+  Today: [
+    "today",
+    "now",
+    "priority",
+    "morning",
+    "daily",
+    "prep",
+    "tonight",
+    "urgent",
+    "focus",
+    "routine"
+  ],
+  Calendar: [
+    "calendar",
+    "meeting",
+    "appointment",
+    "schedule",
+    "event",
+    "call",
+    "date",
+    "time",
+    "reservation",
+    "deadline"
+  ],
+  Tasks: [
+    "task",
+    "todo",
+    "send",
+    "book",
+    "buy",
+    "finish",
+    "renew",
+    "call",
+    "email",
+    "pay",
+    "order",
+    "pick",
+    "submit",
+    "follow",
+    "fix"
+  ],
+  Notes: [
+    "note",
+    "idea",
+    "remember",
+    "thought",
+    "question",
+    "draft",
+    "list",
+    "journal",
+    "brainstorm",
+    "maybe"
+  ],
+  "Quick Links": [
+    "link",
+    "url",
+    "website",
+    "login",
+    "portal",
+    "app",
+    "shortcut",
+    "dashboard",
+    "account"
+  ],
+  Documents: [
+    "document",
+    "file",
+    "pdf",
+    "form",
+    "paperwork",
+    "tax",
+    "resume",
+    "contract",
+    "license",
+    "passport",
+    "statement",
+    "receipt",
+    "invoice"
+  ],
+  Travel: [
+    "travel",
+    "trip",
+    "flight",
+    "hotel",
+    "packing",
+    "itinerary",
+    "passport",
+    "vacation",
+    "airbnb",
+    "rental",
+    "luggage",
+    "reservation"
+  ],
+  Home: [
+    "home",
+    "house",
+    "maintenance",
+    "utility",
+    "repair",
+    "contractor",
+    "clean",
+    "garage",
+    "lawn",
+    "mortgage",
+    "insurance",
+    "appliance"
+  ],
+  Wedding: [
+    "wedding",
+    "vendor",
+    "guest",
+    "venue",
+    "registry",
+    "budget",
+    "timeline",
+    "invite",
+    "florist",
+    "catering",
+    "photographer",
+    "dj"
+  ],
+  "Work Resources": [
+    "work",
+    "job",
+    "team",
+    "template",
+    "policy",
+    "onboarding",
+    "project",
+    "client",
+    "manager",
+    "expense",
+    "crm",
+    "presentation"
+  ]
 };
 
 function getInitialState(): DashboardState {
@@ -153,6 +278,10 @@ function tokenize(value: string) {
     .filter((token) => token.length > 1);
 }
 
+function normalizeLabel(value: string) {
+  return tokenize(value).join(" ");
+}
+
 function scoreText(queryTokens: string[], text: string) {
   const normalizedText = text.toLowerCase();
   return queryTokens.reduce((score, token) => {
@@ -168,6 +297,21 @@ function scoreText(queryTokens: string[], text: string) {
   }, 0);
 }
 
+function hasExplicitSectionReference(input: string, sectionTitle: string) {
+  const normalizedInput = ` ${normalizeLabel(input)} `;
+  const normalizedTitle = normalizeLabel(sectionTitle);
+
+  if (!normalizedTitle) {
+    return false;
+  }
+
+  return (
+    normalizedInput.includes(` ${normalizedTitle} `) ||
+    input.toLowerCase().includes(`#${normalizedTitle.replace(/\s+/g, "")}`) ||
+    input.toLowerCase().startsWith(`${sectionTitle.toLowerCase()}:`)
+  );
+}
+
 function inferSectionIndex(input: string, sections: StoredSection[]) {
   const inputTokens = tokenize(input);
 
@@ -178,9 +322,14 @@ function inferSectionIndex(input: string, sections: StoredSection[]) {
   const scores = sections.map((section, index) => {
     const hints = categoryHints[section.title] ?? [];
     const sectionText = [section.title, ...hints, ...section.items].join(" ");
+    const explicitBoost = hasExplicitSectionReference(input, section.title) ? 50 : 0;
+    const titleTokenBoost = scoreText(inputTokens, section.title) * 2;
+    const hintBoost = scoreText(inputTokens, hints.join(" ")) * 4;
+    const existingItemBoost = scoreText(inputTokens, section.items.join(" "));
+
     return {
       index,
-      score: scoreText(inputTokens, sectionText)
+      score: explicitBoost + titleTokenBoost + hintBoost + existingItemBoost + scoreText(inputTokens, sectionText)
     };
   });
 
@@ -527,6 +676,22 @@ export function EditableDashboard() {
     }));
   }
 
+  function addMetric() {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      metrics: [...current.metrics, { label: "New label", value: "0" }]
+    }));
+  }
+
+  function removeMetric(index: number) {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      metrics: current.metrics.filter((_, metricIndex) => metricIndex !== index)
+    }));
+  }
+
   function updatePlan(index: number, key: keyof StoredPlan, value: string) {
     setSaveStatus("Saving...");
     setState((current) => ({
@@ -537,6 +702,22 @@ export function EditableDashboard() {
     }));
   }
 
+  function addPlan() {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      plans: [...current.plans, { label: "New plan", text: "Add details here." }]
+    }));
+  }
+
+  function removePlan(index: number) {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      plans: current.plans.filter((_, planIndex) => planIndex !== index)
+    }));
+  }
+
   function updateSectionTitle(index: number, value: string) {
     setSaveStatus("Saving...");
     setState((current) => ({
@@ -544,6 +725,22 @@ export function EditableDashboard() {
       sections: current.sections.map((section, sectionIndex) =>
         sectionIndex === index ? { ...section, title: value } : section
       )
+    }));
+  }
+
+  function addSection() {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      sections: [...current.sections, { title: "New Section", items: ["New item"] }]
+    }));
+  }
+
+  function removeSection(index: number) {
+    setSaveStatus("Saving...");
+    setState((current) => ({
+      ...current,
+      sections: current.sections.filter((_, sectionIndex) => sectionIndex !== index)
     }));
   }
 
@@ -841,111 +1038,182 @@ export function EditableDashboard() {
         ) : null}
       </section>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {state.metrics.map((metric, index) => (
-          <article
-            key={`${metric.label}-${index}`}
-            className={`rounded-lg border border-ink/10 p-5 shadow-sm ${
-              index === 0 ? "bg-clay text-white" : "bg-white text-ink"
-            }`}
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-ink">Labels</h2>
+          <button
+            type="button"
+            onClick={addMetric}
+            className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
           >
-            <Field
-              label="Label"
-              value={metric.label}
-              onChange={(value) => updateMetric(index, "label", value)}
-            />
-            <div className="mt-3">
-              <Field
-                label="Value"
-                value={metric.value}
-                onChange={(value) => updateMetric(index, "value", value)}
-              />
-            </div>
-          </article>
-        ))}
-      </section>
-
-      <section className="mt-6 grid gap-4 lg:grid-cols-2">
-        {state.plans.map((item, index) => {
-          const Icon = iconMap[item.label as keyof typeof iconMap] ?? ClipboardList;
-
-          return (
-            <article key={`${item.label}-${index}`} className="surface rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
-                  <Icon size={20} aria-hidden="true" />
-                </span>
+            <Plus size={16} aria-hidden="true" />
+            Add label
+          </button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {state.metrics.map((metric, index) => (
+            <article
+              key={`${metric.label}-${index}`}
+              className={`rounded-lg border border-ink/10 p-5 shadow-sm ${
+                index === 0 ? "bg-clay text-white" : "bg-white text-ink"
+              }`}
+            >
+              <div className="flex items-start gap-2">
                 <div className="flex-1">
                   <Field
-                    label="Plan"
-                    value={item.label}
-                    onChange={(value) => updatePlan(index, "label", value)}
+                    label="Label"
+                    value={metric.label}
+                    onChange={(value) => updateMetric(index, "label", value)}
                   />
                 </div>
+                <button
+                  type="button"
+                  onClick={() => removeMetric(index)}
+                  className={`mt-5 grid size-10 shrink-0 place-items-center rounded-md border transition ${
+                    index === 0
+                      ? "border-white/20 bg-white/10 text-white hover:bg-white hover:text-clay"
+                      : "border-ink/10 bg-white text-ink/60 hover:bg-clay hover:text-white"
+                  }`}
+                  aria-label={`Remove ${metric.label}`}
+                >
+                  <Trash2 size={16} aria-hidden="true" />
+                </button>
               </div>
-              <div className="mt-4">
+              <div className="mt-3">
                 <Field
-                  label="Details"
-                  value={item.text}
-                  onChange={(value) => updatePlan(index, "text", value)}
-                  multiline
+                  label="Value"
+                  value={metric.value}
+                  onChange={(value) => updateMetric(index, "value", value)}
                 />
               </div>
             </article>
-          );
-        })}
+          ))}
+        </div>
       </section>
 
-      <section className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {state.sections.map((section, sectionIndex) => {
-          const Icon = iconMap[section.title as keyof typeof iconMap] ?? NotebookPen;
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-ink">Plan Labels</h2>
+          <button
+            type="button"
+            onClick={addPlan}
+            className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add plan
+          </button>
+        </div>
+        <div className="grid gap-4 lg:grid-cols-2">
+          {state.plans.map((item, index) => {
+            const Icon = iconMap[item.label as keyof typeof iconMap] ?? ClipboardList;
 
-          return (
-            <section key={`${section.title}-${sectionIndex}`} className="surface rounded-lg p-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-10 shrink-0 place-items-center rounded-md bg-mist text-moss">
-                  <Icon size={20} aria-hidden="true" />
-                </span>
-                <div className="flex-1">
+            return (
+              <article key={`${item.label}-${index}`} className="surface rounded-lg p-5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 place-items-center rounded-md bg-mist text-moss">
+                    <Icon size={20} aria-hidden="true" />
+                  </span>
+                  <div className="flex-1">
+                    <Field
+                      label="Plan"
+                      value={item.label}
+                      onChange={(value) => updatePlan(index, "label", value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removePlan(index)}
+                    className="grid size-10 shrink-0 place-items-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:bg-clay hover:text-white"
+                    aria-label={`Remove ${item.label}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mt-4">
                   <Field
-                    label="Section"
-                    value={section.title}
-                    onChange={(value) => updateSectionTitle(sectionIndex, value)}
+                    label="Details"
+                    value={item.text}
+                    onChange={(value) => updatePlan(index, "text", value)}
+                    multiline
                   />
                 </div>
-              </div>
-              <div className="mt-4 space-y-3">
-                {section.items.map((item, itemIndex) => (
-                  <div key={`${section.title}-${itemIndex}`} className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <Field
-                        label={`Item ${itemIndex + 1}`}
-                        value={item}
-                        onChange={(value) => updateSectionItem(sectionIndex, itemIndex, value)}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => removeSectionItem(sectionIndex, itemIndex)}
-                      className="grid size-10 shrink-0 place-items-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:bg-clay hover:text-white"
-                      aria-label={`Remove ${item}`}
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                    </button>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h2 className="text-lg font-semibold text-ink">Sections</h2>
+          <button
+            type="button"
+            onClick={addSection}
+            className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
+          >
+            <Plus size={16} aria-hidden="true" />
+            Add section
+          </button>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {state.sections.map((section, sectionIndex) => {
+            const Icon = iconMap[section.title as keyof typeof iconMap] ?? NotebookPen;
+
+            return (
+              <section key={`${section.title}-${sectionIndex}`} className="surface rounded-lg p-5">
+                <div className="flex items-center gap-3">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-md bg-mist text-moss">
+                    <Icon size={20} aria-hidden="true" />
+                  </span>
+                  <div className="flex-1">
+                    <Field
+                      label="Section"
+                      value={section.title}
+                      onChange={(value) => updateSectionTitle(sectionIndex, value)}
+                    />
                   </div>
-                ))}
-              </div>
-              <button
-                type="button"
-                onClick={() => addSectionItem(sectionIndex)}
-                className="mt-4 inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
-              >
-                <Plus size={16} aria-hidden="true" />
-                Add item
-              </button>
-            </section>
-          );
-        })}
+                  <button
+                    type="button"
+                    onClick={() => removeSection(sectionIndex)}
+                    className="grid size-10 shrink-0 place-items-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:bg-clay hover:text-white"
+                    aria-label={`Remove ${section.title}`}
+                  >
+                    <Trash2 size={16} aria-hidden="true" />
+                  </button>
+                </div>
+                <div className="mt-4 space-y-3">
+                  {section.items.map((item, itemIndex) => (
+                    <div key={`${section.title}-${itemIndex}`} className="flex items-end gap-2">
+                      <div className="flex-1">
+                        <Field
+                          label={`Item ${itemIndex + 1}`}
+                          value={item}
+                          onChange={(value) => updateSectionItem(sectionIndex, itemIndex, value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removeSectionItem(sectionIndex, itemIndex)}
+                        className="grid size-10 shrink-0 place-items-center rounded-md border border-ink/10 bg-white text-ink/60 transition hover:bg-clay hover:text-white"
+                        aria-label={`Remove ${item}`}
+                      >
+                        <Trash2 size={16} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => addSectionItem(sectionIndex)}
+                  className="mt-4 inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm font-semibold text-ink transition hover:bg-mist"
+                >
+                  <Plus size={16} aria-hidden="true" />
+                  Add item
+                </button>
+              </section>
+            );
+          })}
+        </div>
       </section>
     </>
   );
