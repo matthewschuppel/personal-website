@@ -853,15 +853,12 @@ export function EditableDashboard() {
   const todaySection = state.sections.find((section) => section.title.toLowerCase() === "today");
   const tasksSection = state.sections.find((section) => section.title.toLowerCase() === "tasks");
   const calendarSection = state.sections.find((section) => section.title.toLowerCase() === "calendar");
-  const todayCalendarEvents = calendarEvents
+  const importedCalendarItems = calendarEvents
     .filter((event) => isSameCalendarDay(event.startsAt, now))
-    .slice(0, 3);
+    .map((event) => `${formatCalendarDate(event.startsAt)} - ${event.title}`);
   const manualCalendarItems = calendarSection?.items.slice(0, 3) ?? [];
   const todayTodos = [...(todaySection?.items ?? []), ...(tasksSection?.items ?? [])].slice(0, 4);
-  const eventSummary =
-    todayCalendarEvents.length > 0
-      ? todayCalendarEvents.map((event) => `${formatCalendarDate(event.startsAt)} - ${event.title}`)
-      : manualCalendarItems;
+  const eventSummary = [...importedCalendarItems, ...manualCalendarItems].slice(0, 5);
 
   return (
     <>
