@@ -434,11 +434,11 @@ export function EditableDashboard() {
         (position) => {
           loadWeather(position.coords.latitude, position.coords.longitude, "Current location");
         },
-        () => loadWeather(41.8781, -87.6298, "Chicago"),
+        () => loadWeather(32.7767, -96.797, "Dallas, TX"),
         { timeout: 6000, maximumAge: 30 * 60 * 1000 }
       );
     } else {
-      loadWeather(41.8781, -87.6298, "Chicago");
+      loadWeather(32.7767, -96.797, "Dallas, TX");
     }
 
     return () => {
