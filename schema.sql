@@ -59,6 +59,32 @@ CREATE TABLE IF NOT EXISTS trips (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS dashboard_resources (
+  id TEXT PRIMARY KEY,
+  section TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  status TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dashboard_projects (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  area TEXT NOT NULL,
+  status TEXT,
+  next_step TEXT,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS dashboard_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS home_projects (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -105,6 +131,8 @@ CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
 CREATE INDEX IF NOT EXISTS idx_habit_checkins_habit_id ON habit_checkins(habit_id);
 CREATE INDEX IF NOT EXISTS idx_habit_checkins_completed_on ON habit_checkins(completed_on);
+CREATE INDEX IF NOT EXISTS idx_dashboard_resources_section ON dashboard_resources(section);
+CREATE INDEX IF NOT EXISTS idx_dashboard_projects_area ON dashboard_projects(area);
 CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_category ON bookmarks(category);
 CREATE INDEX IF NOT EXISTS idx_gallery_items_album ON gallery_items(album);

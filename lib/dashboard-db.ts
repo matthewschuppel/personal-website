@@ -2,11 +2,25 @@ import {
   mockDocuments,
   mockHabits,
   mockNotes,
+  mockBookmarks,
+  mockProjects,
+  mockTrips,
   mockTasks,
+  financeResources,
+  homeResources,
+  knowledgeResources,
+  photographyResources,
+  weddingResources,
+  workResources,
+  type DashboardSectionKey,
+  type MockBookmark,
   type MockDocument,
   type MockHabit,
   type MockNote,
-  type MockTask
+  type MockProject,
+  type MockResource,
+  type MockTask,
+  type MockTrip
 } from "@/data/matthewos";
 import { createId, getD1Database } from "@/lib/d1";
 import { getR2Bucket } from "@/lib/r2-storage";
@@ -47,6 +61,69 @@ type HabitRow = {
   color: MockHabit["color"] | null;
   completions: string | null;
   updated_at: string;
+};
+
+type TripRow = {
+  id: string;
+  destination: string;
+  start_date: string | null;
+  end_date: string | null;
+  status: string | null;
+  itinerary_notes: string | null;
+  updated_at: string;
+};
+
+type BookmarkRow = {
+  id: string;
+  title: string;
+  url: string;
+  category: MockBookmark["category"] | null;
+  notes: string | null;
+  updated_at: string;
+};
+
+type ProjectRow = {
+  id: string;
+  title: string;
+  area: MockProject["area"];
+  status: string | null;
+  next_step: string | null;
+  updated_at: string;
+};
+
+type ResourceRow = {
+  id: string;
+  section: ResourceKey;
+  title: string;
+  detail: string | null;
+  status: string | null;
+  updated_at: string;
+};
+
+export type ResourceKey = "Home" | "Work" | "Photography" | "Wedding" | "Finance" | "Knowledge Library";
+export type ResourceGroups = Record<ResourceKey, MockResource[]>;
+
+export type DashboardSettingsData = {
+  displayName: string;
+  weatherLocation: string;
+  defaultSection: DashboardSectionKey;
+  compactCards: boolean;
+};
+
+export const defaultDashboardSettings: DashboardSettingsData = {
+  displayName: "Matthew",
+  weatherLocation: "Dallas, TX",
+  defaultSection: "Today",
+  compactCards: false
+};
+
+export const resourceSeed: ResourceGroups = {
+  Home: homeResources,
+  Work: workResources,
+  Photography: photographyResources,
+  Wedding: weddingResources,
+  Finance: financeResources,
+  "Knowledge Library": knowledgeResources
 };
 
 function toTask(row: TaskRow): MockTask {
@@ -96,6 +173,73 @@ function toHabit(row: HabitRow): MockHabit {
     frequency: row.frequency,
     color: row.color ?? "moss",
     completions: row.completions ? row.completions.split(",").filter(Boolean) : []
+  };
+}
+
+function toTrip(row: TripRow): MockTrip {
+  const dates = row.start_date && row.end_date ? `${row.start_date} to ${row.end_date}` : row.start_date ?? "TBD";
+
+  return {
+    id: row.id,
+    destination: row.destination,
+    dates,
+    status: row.status ?? "Planning",
+    detail: row.itinerary_notes ?? "Trip details ready for notes."
+  };
+}
+
+function toBookmark(row: BookmarkRow): MockBookmark {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category ?? "Knowledge Library",
+    url: row.url,
+    description: row.notes ?? "Saved dashboard bookmark."
+  };
+}
+
+function toProject(row: ProjectRow): MockProject {
+  return {
+    id: row.id,
+    title: row.title,
+    area: row.area,
+    status: row.status ?? "New",
+    nextStep: row.next_step ?? "Define next action."
+  };
+}
+
+function toResource(row: ResourceRow): MockResource {
+  return {
+    id: row.id,
+    title: row.title,
+    detail: row.detail ?? "Add details later.",
+    status: row.status ?? "New"
+  };
+}
+
+function groupResources(rows: ResourceRow[]): ResourceGroups {
+  const grouped: ResourceGroups = {
+    Home: [],
+    Work: [],
+    Photography: [],
+    Wedding: [],
+    Finance: [],
+    "Knowledge Library": []
+  };
+
+  for (const row of rows) {
+    if (row.section in grouped) {
+      grouped[row.section].push(toResource(row));
+    }
+  }
+
+  return {
+    Home: grouped.Home.length ? grouped.Home : resourceSeed.Home,
+    Work: grouped.Work.length ? grouped.Work : resourceSeed.Work,
+    Photography: grouped.Photography.length ? grouped.Photography : resourceSeed.Photography,
+    Wedding: grouped.Wedding.length ? grouped.Wedding : resourceSeed.Wedding,
+    Finance: grouped.Finance.length ? grouped.Finance : resourceSeed.Finance,
+    "Knowledge Library": grouped["Knowledge Library"].length ? grouped["Knowledge Library"] : resourceSeed["Knowledge Library"]
   };
 }
 
@@ -357,6 +501,288 @@ export async function deleteNote(id: string) {
 
   await db.prepare("DELETE FROM notes WHERE id = ?").bind(id).run();
   return true;
+}
+
+export async function listTrips() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return mockTrips;
+  }
+
+  try {
+    const { results = [] } = await db
+      .prepare("SELECT id, destination, start_date, end_date, status, itinerary_notes, updated_at FROM trips ORDER BY updated_at DESC")
+      .all<TripRow>();
+
+    return results.length ? results.map(toTrip) : mockTrips;
+  } catch {
+    return mockTrips;
+  }
+}
+
+export async function createTrip(input: Partial<MockTrip>) {
+  const db = getDbOrNull();
+  const trip: MockTrip = {
+    id: input.id ?? createId("trip"),
+    destination: input.destination?.trim() || "Untitled trip",
+    dates: input.dates ?? "TBD",
+    status: input.status ?? "New",
+    detail: input.detail ?? "New trip ready for flights, lodging, and notes."
+  };
+
+  if (!db) {
+    return trip;
+  }
+
+  try {
+    await db
+      .prepare("INSERT INTO trips (id, destination, start_date, end_date, status, itinerary_notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(trip.id, trip.destination, trip.dates === "TBD" ? null : trip.dates, null, trip.status, trip.detail)
+      .run();
+  } catch {
+    return trip;
+  }
+
+  return trip;
+}
+
+export async function deleteTrip(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return true;
+  }
+
+  try {
+    await db.prepare("DELETE FROM trips WHERE id = ?").bind(id).run();
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
+export async function listBookmarks() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return mockBookmarks;
+  }
+
+  try {
+    const { results = [] } = await db
+      .prepare("SELECT id, title, url, category, notes, updated_at FROM bookmarks ORDER BY updated_at DESC")
+      .all<BookmarkRow>();
+
+    return results.length ? results.map(toBookmark) : mockBookmarks;
+  } catch {
+    return mockBookmarks;
+  }
+}
+
+export async function createBookmark(input: Partial<MockBookmark>) {
+  const db = getDbOrNull();
+  const bookmark: MockBookmark = {
+    id: input.id ?? createId("bookmark"),
+    title: input.title?.trim() || "Untitled bookmark",
+    category: input.category ?? "Knowledge Library",
+    url: input.url?.trim() || "#",
+    description: input.description ?? "Saved dashboard bookmark."
+  };
+
+  if (!db) {
+    return bookmark;
+  }
+
+  try {
+    await db
+      .prepare("INSERT INTO bookmarks (id, title, url, category, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(bookmark.id, bookmark.title, bookmark.url, bookmark.category, bookmark.description)
+      .run();
+  } catch {
+    return bookmark;
+  }
+
+  return bookmark;
+}
+
+export async function deleteBookmark(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return true;
+  }
+
+  try {
+    await db.prepare("DELETE FROM bookmarks WHERE id = ?").bind(id).run();
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
+export async function listProjects() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return mockProjects;
+  }
+
+  try {
+    const { results = [] } = await db
+      .prepare("SELECT id, title, area, status, next_step, updated_at FROM dashboard_projects ORDER BY updated_at DESC")
+      .all<ProjectRow>();
+
+    return results.length ? results.map(toProject) : mockProjects;
+  } catch {
+    return mockProjects;
+  }
+}
+
+export async function createProject(input: Partial<MockProject>) {
+  const db = getDbOrNull();
+  const project: MockProject = {
+    id: input.id ?? createId("project"),
+    title: input.title?.trim() || "Untitled project",
+    area: input.area ?? "Home",
+    status: input.status ?? "New",
+    nextStep: input.nextStep ?? "Define next action."
+  };
+
+  if (!db) {
+    return project;
+  }
+
+  try {
+    await db
+      .prepare("INSERT INTO dashboard_projects (id, title, area, status, next_step, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(project.id, project.title, project.area, project.status, project.nextStep)
+      .run();
+  } catch {
+    return project;
+  }
+
+  return project;
+}
+
+export async function deleteProject(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return true;
+  }
+
+  try {
+    await db.prepare("DELETE FROM dashboard_projects WHERE id = ?").bind(id).run();
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
+export async function listResources() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return resourceSeed;
+  }
+
+  try {
+    const { results = [] } = await db
+      .prepare("SELECT id, section, title, detail, status, updated_at FROM dashboard_resources ORDER BY updated_at DESC")
+      .all<ResourceRow>();
+
+    return results.length ? groupResources(results) : resourceSeed;
+  } catch {
+    return resourceSeed;
+  }
+}
+
+export async function createResource(section: ResourceKey, input: Partial<MockResource>) {
+  const db = getDbOrNull();
+  const resource: MockResource = {
+    id: input.id ?? createId("resource"),
+    title: input.title?.trim() || "Untitled item",
+    detail: input.detail ?? "New editable item. Add details later.",
+    status: input.status ?? "New"
+  };
+
+  if (!db) {
+    return resource;
+  }
+
+  try {
+    await db
+      .prepare("INSERT INTO dashboard_resources (id, section, title, detail, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(resource.id, section, resource.title, resource.detail, resource.status)
+      .run();
+  } catch {
+    return resource;
+  }
+
+  return resource;
+}
+
+export async function deleteResource(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return true;
+  }
+
+  try {
+    await db.prepare("DELETE FROM dashboard_resources WHERE id = ?").bind(id).run();
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
+export async function getDashboardSettings() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return defaultDashboardSettings;
+  }
+
+  try {
+    const row = await db
+      .prepare("SELECT value FROM dashboard_settings WHERE key = ?")
+      .bind("dashboard")
+      .first<{ value: string }>();
+
+    return row?.value ? { ...defaultDashboardSettings, ...JSON.parse(row.value) } as DashboardSettingsData : defaultDashboardSettings;
+  } catch {
+    return defaultDashboardSettings;
+  }
+}
+
+export async function saveDashboardSettings(settings: DashboardSettingsData) {
+  const db = getDbOrNull();
+  const nextSettings = { ...defaultDashboardSettings, ...settings };
+
+  if (!db) {
+    return nextSettings;
+  }
+
+  try {
+    await db
+      .prepare(
+        `INSERT INTO dashboard_settings (key, value, updated_at)
+        VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = CURRENT_TIMESTAMP`
+      )
+      .bind("dashboard", JSON.stringify(nextSettings))
+      .run();
+  } catch {
+    return nextSettings;
+  }
+
+  return nextSettings;
 }
 
 export async function listDocuments() {

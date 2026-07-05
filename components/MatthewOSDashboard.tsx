@@ -326,7 +326,12 @@ export function MatthewOSDashboard() {
     setSettings(nextSettings);
     setWeatherLocation(nextSettings.weatherLocation);
     window.localStorage.setItem("matthewos-settings", JSON.stringify(nextSettings));
-    setActivity("Settings saved on this device.");
+    fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextSettings)
+    }).catch(() => undefined);
+    setActivity("Settings saved to MatthewOS.");
   }
 
   useEffect(() => {
@@ -342,6 +347,24 @@ export function MatthewOSDashboard() {
         setActiveSection(defaultSettings.defaultSection);
       }
     }
+
+    async function loadSavedSettings() {
+      try {
+        const response = await fetch("/api/settings");
+        const data = await response.json() as { settings?: DashboardSettings };
+
+        if (response.ok && data.settings) {
+          const nextSettings = { ...defaultSettings, ...data.settings };
+          setSettings(nextSettings);
+          setActiveSection(nextSettings.defaultSection);
+          setWeatherLocation(nextSettings.weatherLocation);
+        }
+      } catch {
+        // Local storage remains the fallback until the D1 settings table is applied.
+      }
+    }
+
+    void loadSavedSettings();
   }, []);
 
   useEffect(() => {
@@ -350,11 +373,15 @@ export function MatthewOSDashboard() {
       setDocumentStatus("loading");
 
       try {
-        const [tasksResponse, notesResponse, habitsResponse, documentsResponse] = await Promise.all([
+        const [tasksResponse, notesResponse, habitsResponse, documentsResponse, tripsResponse, projectsResponse, bookmarksResponse, resourcesResponse] = await Promise.all([
           fetch("/api/tasks"),
           fetch("/api/notes"),
           fetch("/api/habits"),
-          fetch("/api/documents")
+          fetch("/api/documents"),
+          fetch("/api/trips"),
+          fetch("/api/projects"),
+          fetch("/api/bookmarks"),
+          fetch("/api/resources")
         ]);
 
         if (tasksResponse.ok) {
@@ -377,7 +404,27 @@ export function MatthewOSDashboard() {
           setDocuments(data.documents ?? mockDocuments);
         }
 
-        setDataStatus(tasksResponse.ok && notesResponse.ok && habitsResponse.ok ? "connected" : "fallback");
+        if (tripsResponse.ok) {
+          const data = await tripsResponse.json() as { trips?: MockTrip[] };
+          setTrips(data.trips ?? mockTrips);
+        }
+
+        if (projectsResponse.ok) {
+          const data = await projectsResponse.json() as { projects?: MockProject[] };
+          setProjects(data.projects ?? mockProjects);
+        }
+
+        if (bookmarksResponse.ok) {
+          const data = await bookmarksResponse.json() as { bookmarks?: MockBookmark[] };
+          setBookmarks(data.bookmarks ?? mockBookmarks);
+        }
+
+        if (resourcesResponse.ok) {
+          const data = await resourcesResponse.json() as { resources?: Record<ResourceKey, MockResource[]> };
+          setResourceGroups(data.resources ?? resourceSeed);
+        }
+
+        setDataStatus(tasksResponse.ok && notesResponse.ok && habitsResponse.ok && tripsResponse.ok && projectsResponse.ok && bookmarksResponse.ok && resourcesResponse.ok ? "connected" : "fallback");
         setDocumentStatus(documentsResponse.ok ? "connected" : "fallback");
         setActivity("Connected to MatthewOS APIs.");
       } catch {
@@ -575,20 +622,38 @@ export function MatthewOSDashboard() {
     }
 
     if (mode === "trip") {
-      setTrips((current) => [{ id, destination: value, dates: "TBD", status: "Idea", detail: "Captured trip idea ready for details." }, ...current]);
+      const fallback: MockTrip = { id, destination: value, dates: "TBD", status: "Idea", detail: "Captured trip idea ready for details." };
+      const response = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fallback)
+      }).catch(() => null);
+      const data = await response?.json().catch(() => null) as { trip?: MockTrip } | null;
+      setTrips((current) => [data?.trip ?? fallback, ...current]);
       setActiveSection("Travel");
     }
 
     if (mode === "project") {
-      setProjects((current) => [{ id, title: value, area: "Home", status: "New", nextStep: "Define next action." }, ...current]);
+      const fallback: MockProject = { id, title: value, area: "Home", status: "New", nextStep: "Define next action." };
+      const response = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fallback)
+      }).catch(() => null);
+      const data = await response?.json().catch(() => null) as { project?: MockProject } | null;
+      setProjects((current) => [data?.project ?? fallback, ...current]);
       setActiveSection("Home");
     }
 
     if (mode === "bookmark") {
-      setBookmarks((current) => [
-        { id, title: value, category: "Knowledge Library", url: value.startsWith("http") ? value : "#", description: "Captured bookmark ready for notes." },
-        ...current
-      ]);
+      const fallback: MockBookmark = { id, title: value, category: "Knowledge Library", url: value.startsWith("http") ? value : "#", description: "Captured bookmark ready for notes." };
+      const response = await fetch("/api/bookmarks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fallback)
+      }).catch(() => null);
+      const data = await response?.json().catch(() => null) as { bookmark?: MockBookmark } | null;
+      setBookmarks((current) => [data?.bookmark ?? fallback, ...current]);
       setActiveSection("Knowledge Library");
     }
 
@@ -724,27 +789,42 @@ export function MatthewOSDashboard() {
     await fetch(`/api/documents/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
-  function addEditableResource(section: ResourceKey, title: string) {
+  async function addEditableResource(section: ResourceKey, title: string) {
     const value = title.trim();
 
     if (!value) return;
 
+    const fallback: MockResource = {
+      id: `${section.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`,
+      title: value,
+      detail: "New editable item. Add details later.",
+      status: "New"
+    };
+    const response = await fetch("/api/resources", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ section, ...fallback })
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null) as { resource?: MockResource } | null;
+    const resource = data?.resource ?? fallback;
+
     setResourceGroups((current) => ({
       ...current,
       [section]: [
-        { id: `${section.toLowerCase().replace(/\s+/g, "-")}-${Date.now()}`, title: value, detail: "New editable item. Add details later.", status: "New" },
+        resource,
         ...current[section]
       ]
     }));
     setActivity(`Added "${value}" to ${section}.`);
   }
 
-  function removeEditableResource(section: ResourceKey, id: string) {
+  async function removeEditableResource(section: ResourceKey, id: string) {
     setResourceGroups((current) => ({
       ...current,
       [section]: current[section].filter((item) => item.id !== id)
     }));
     setActivity(`Removed item from ${section}.`);
+    await fetch(`/api/resources/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
   function executeCommand() {
@@ -758,7 +838,7 @@ export function MatthewOSDashboard() {
     );
 
     if (resourceSection) {
-      addEditableResource(resourceSection, value.replace(new RegExp(resourceSection, "i"), "").replace(/^[:\s-]+/, "") || value);
+      void addEditableResource(resourceSection, value.replace(new RegExp(resourceSection, "i"), "").replace(/^[:\s-]+/, "") || value);
     } else {
       void saveTypedItem(classifyCapture(value), value);
     }
@@ -899,7 +979,7 @@ export function MatthewOSDashboard() {
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
-            addEditableResource(section, String(formData.get("title") ?? ""));
+            void addEditableResource(section, String(formData.get("title") ?? ""));
             event.currentTarget.reset();
           }}
           className="grid gap-2 rounded-lg border border-ink/10 bg-white/82 p-4 shadow-sm sm:grid-cols-[1fr_auto]"
@@ -914,7 +994,7 @@ export function MatthewOSDashboard() {
           {resourceGroups[section].map((resource) => (
             <LightCard key={resource.id} title={resource.title} eyebrow={section} meta={resource.status} compact={compact}>
               <p>{resource.detail}</p>
-              <button type="button" onClick={() => removeEditableResource(section, resource.id)} className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-clay">
+              <button type="button" onClick={() => void removeEditableResource(section, resource.id)} className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-clay">
                 <Trash2 size={13} aria-hidden="true" />
                 Remove
               </button>
@@ -1017,7 +1097,7 @@ export function MatthewOSDashboard() {
               const formData = new FormData(event.currentTarget);
               const destination = String(formData.get("destination") ?? "").trim();
               if (destination) {
-                setTrips((current) => [{ id: `trip-${Date.now()}`, destination, dates: "TBD", status: "New", detail: "New trip ready for flights, lodging, and notes." }, ...current]);
+                void saveTypedItem("trip", destination);
               }
               event.currentTarget.reset();
             }}
@@ -1032,7 +1112,18 @@ export function MatthewOSDashboard() {
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             {trips.map((trip) => (
               <LightCard key={trip.id} title={trip.destination} eyebrow={trip.status} meta={trip.dates} compact={compact}>
-                {trip.detail}
+                <p>{trip.detail}</p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrips((current) => current.filter((item) => item.id !== trip.id));
+                    void fetch(`/api/trips/${trip.id}`, { method: "DELETE" }).catch(() => undefined);
+                  }}
+                  className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-clay"
+                >
+                  <Trash2 size={13} aria-hidden="true" />
+                  Remove
+                </button>
               </LightCard>
             ))}
           </div>
