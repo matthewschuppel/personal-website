@@ -306,3 +306,32 @@ export async function deleteDocument(id: string) {
   await db.prepare("DELETE FROM documents WHERE id = ?").bind(id).run();
   return true;
 }
+
+export async function getDocumentObject(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return null;
+  }
+
+  const existing = await db
+    .prepare("SELECT title, r2_key, content_type FROM documents WHERE id = ?")
+    .bind(id)
+    .first<{ title: string; r2_key: string; content_type: string | null }>();
+
+  if (!existing?.r2_key) {
+    return null;
+  }
+
+  const object = await getDocumentsBucket().get(existing.r2_key);
+
+  if (!object) {
+    return null;
+  }
+
+  return {
+    object,
+    title: existing.title,
+    contentType: existing.content_type ?? object.httpMetadata?.contentType ?? "application/octet-stream"
+  };
+}
