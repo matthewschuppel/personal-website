@@ -20,6 +20,10 @@ body {
   color: #19221f;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 button,
 input,
 textarea {
@@ -35,6 +39,13 @@ textarea {
 
 a {
   text-decoration: none;
+}
+
+a,
+button {
+  transition-property: color, background-color, border-color, box-shadow, transform, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
 }
 
 ::selection {
