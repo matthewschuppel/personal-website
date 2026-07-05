@@ -19,6 +19,24 @@ CREATE TABLE IF NOT EXISTS tasks (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS habits (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  frequency TEXT NOT NULL DEFAULT 'Daily',
+  color TEXT NOT NULL DEFAULT 'moss',
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS habit_checkins (
+  id TEXT PRIMARY KEY,
+  habit_id TEXT NOT NULL,
+  completed_on TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(habit_id, completed_on),
+  FOREIGN KEY (habit_id) REFERENCES habits(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS documents (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -85,6 +103,8 @@ CREATE TABLE IF NOT EXISTS gallery_items (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
 CREATE INDEX IF NOT EXISTS idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX IF NOT EXISTS idx_habit_checkins_habit_id ON habit_checkins(habit_id);
+CREATE INDEX IF NOT EXISTS idx_habit_checkins_completed_on ON habit_checkins(completed_on);
 CREATE INDEX IF NOT EXISTS idx_documents_category ON documents(category);
 CREATE INDEX IF NOT EXISTS idx_bookmarks_category ON bookmarks(category);
 CREATE INDEX IF NOT EXISTS idx_gallery_items_album ON gallery_items(album);

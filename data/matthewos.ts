@@ -11,6 +11,7 @@ import {
   Landmark,
   NotebookPen,
   Plane,
+  Repeat2,
   Settings,
   Sun
 } from "lucide-react";
@@ -19,6 +20,7 @@ export type DashboardSectionKey =
   | "Today"
   | "Notes"
   | "Tasks"
+  | "Habits"
   | "Calendar"
   | "Documents"
   | "Home"
@@ -42,6 +44,16 @@ export type MockTask = {
   status: "Today" | "Next" | "Waiting" | "Done";
   dueDate: string;
   area: DashboardSectionKey;
+};
+
+export type MockHabitFrequency = "Daily" | "Weekdays" | "3x/week" | "2x/week" | "Weekly";
+
+export type MockHabit = {
+  id: string;
+  title: string;
+  frequency: MockHabitFrequency;
+  completions: string[];
+  color: "moss" | "clay" | "amber" | "ink";
 };
 
 export type MockNote = {
@@ -117,6 +129,7 @@ export const osNavigation: DashboardNavItem[] = [
   { label: "Today", icon: Sun },
   { label: "Notes", icon: NotebookPen },
   { label: "Tasks", icon: CheckSquare },
+  { label: "Habits", icon: Repeat2 },
   { label: "Calendar", icon: CalendarDays },
   { label: "Documents", icon: FileText },
   { label: "Home", icon: Home },
@@ -132,17 +145,54 @@ export const osNavigation: DashboardNavItem[] = [
 export const quickActions = [
   "New Note",
   "New Task",
+  "Add Habit",
   "Upload Document",
   "Add Trip",
   "Add Home Project",
   "Add Bookmark"
 ];
 
+function monthDate(day: number) {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export const mockEvents: MockEvent[] = [
   { id: "event-001", title: "Morning planning block", time: "8:30 AM", calendar: "Personal" },
   { id: "event-002", title: "Project follow-up window", time: "1:00 PM", calendar: "Work" },
   { id: "event-003", title: "Home maintenance review", time: "5:30 PM", calendar: "Home" },
   { id: "event-004", title: "Wedding vendor comparison", time: "Sunday", calendar: "Wedding" }
+];
+
+export const mockHabits: MockHabit[] = [
+  {
+    id: "habit-001",
+    title: "Morning movement",
+    frequency: "Daily",
+    completions: [1, 2, 3, 5].map(monthDate),
+    color: "moss"
+  },
+  {
+    id: "habit-002",
+    title: "Read for 20 minutes",
+    frequency: "3x/week",
+    completions: [1, 4].map(monthDate),
+    color: "clay"
+  },
+  {
+    id: "habit-003",
+    title: "Strength training",
+    frequency: "2x/week",
+    completions: [2].map(monthDate),
+    color: "amber"
+  },
+  {
+    id: "habit-004",
+    title: "Weekly reset",
+    frequency: "Weekly",
+    completions: [5].map(monthDate),
+    color: "ink"
+  }
 ];
 
 export const mockTasks: MockTask[] = [
@@ -405,6 +455,11 @@ export const featureSections: FeatureSection[] = [
     title: "Tasks",
     description: "A practical task list with priority, due dates, and status.",
     items: ["Task list", "Priority", "Due date", "Status", "Today top three"]
+  },
+  {
+    title: "Habits",
+    description: "A monthly habit tracker for commitments, check-ins, streaks, and progress.",
+    items: ["Habit creation", "Frequency target", "Monthly grid", "Progress percentage", "Streak preview"]
   },
   {
     title: "Calendar",

@@ -25,6 +25,7 @@ import {
   mockBookmarks,
   mockDocuments,
   mockEvents,
+  mockHabits,
   mockNotes,
   mockProjects,
   mockTasks,
@@ -38,6 +39,8 @@ import {
   type FeatureSection,
   type MockBookmark,
   type MockDocument,
+  type MockHabit,
+  type MockHabitFrequency,
   type MockNote,
   type MockProject,
   type MockResource,
@@ -45,7 +48,7 @@ import {
   type MockTrip
 } from "@/data/matthewos";
 
-type ComposerMode = "note" | "task" | "document" | "trip" | "project" | "bookmark";
+type ComposerMode = "note" | "task" | "habit" | "document" | "trip" | "project" | "bookmark";
 type ResourceKey = "Home" | "Work" | "Photography" | "Wedding" | "Finance" | "Knowledge Library";
 type ConnectionState = "loading" | "connected" | "fallback" | "error";
 
@@ -93,6 +96,7 @@ const defaultSettings: DashboardSettings = {
 const composerLabels: Record<ComposerMode, string> = {
   note: "New Note",
   task: "New Task",
+  habit: "Add Habit",
   document: "Upload Document",
   trip: "Add Trip",
   project: "Add Home Project",
@@ -143,6 +147,7 @@ function classifyCapture(value: string): ComposerMode {
   const text = value.toLowerCase();
 
   if (text.includes("task") || text.includes("todo") || text.includes("call") || text.includes("follow up")) return "task";
+  if (text.includes("habit") || text.includes("daily") || text.includes("weekday") || text.includes("routine")) return "habit";
   if (text.includes("trip") || text.includes("flight") || text.includes("hotel") || text.includes("travel")) return "trip";
   if (text.includes("upload") || text.includes("pdf") || text.includes("document") || text.includes("file")) return "document";
   if (text.includes("http") || text.includes("link") || text.includes("bookmark")) return "bookmark";
@@ -152,6 +157,78 @@ function classifyCapture(value: string): ComposerMode {
 
 function isWeatherState(value: WeatherState | { error?: string }): value is WeatherState {
   return "temperature" in value && "location" in value;
+}
+
+function formatDateKey(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function getMonthDays() {
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  return Array.from({ length: daysInMonth }, (_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth(), index + 1);
+    return {
+      day: index + 1,
+      dateKey: formatDateKey(date),
+      isToday: formatDateKey(date) === formatDateKey(now),
+      isFuture: date > now
+    };
+  });
+}
+
+function getMonthLabel() {
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date());
+}
+
+function getWeekdayCountThisMonth() {
+  return getMonthDays().filter((day) => {
+    const weekday = new Date(`${day.dateKey}T12:00:00`).getDay();
+    return weekday > 0 && weekday < 6;
+  }).length;
+}
+
+function getHabitTarget(frequency: MockHabitFrequency) {
+  const daysInMonth = getMonthDays().length;
+
+  if (frequency === "Daily") return daysInMonth;
+  if (frequency === "Weekdays") return getWeekdayCountThisMonth();
+  if (frequency === "3x/week") return Math.ceil((daysInMonth / 7) * 3);
+  if (frequency === "2x/week") return Math.ceil((daysInMonth / 7) * 2);
+  return Math.ceil(daysInMonth / 7);
+}
+
+function getCurrentMonthCompletions(habit: MockHabit) {
+  const monthPrefix = formatDateKey(new Date()).slice(0, 7);
+  return habit.completions.filter((date) => date.startsWith(monthPrefix));
+}
+
+function getHabitStreak(habit: MockHabit) {
+  const completions = new Set(habit.completions);
+  let streak = 0;
+  const cursor = new Date();
+
+  while (completions.has(formatDateKey(cursor))) {
+    streak += 1;
+    cursor.setDate(cursor.getDate() - 1);
+  }
+
+  return streak;
+}
+
+function getHabitProgress(habit: MockHabit) {
+  const completed = getCurrentMonthCompletions(habit).length;
+  const target = getHabitTarget(habit.frequency);
+  const percentage = Math.min(100, Math.round((completed / Math.max(target, 1)) * 100));
+
+  return {
+    completed,
+    target,
+    percentage,
+    remaining: Math.max(target - completed, 0),
+    streak: getHabitStreak(habit)
+  };
 }
 
 function LightCard({
@@ -226,6 +303,7 @@ export function MatthewOSDashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [notes, setNotes] = useState<MockNote[]>(mockNotes);
   const [tasks, setTasks] = useState<MockTask[]>(mockTasks);
+  const [habits, setHabits] = useState<MockHabit[]>(mockHabits);
   const [documents, setDocuments] = useState<MockDocument[]>(mockDocuments);
   const [trips, setTrips] = useState<MockTrip[]>(mockTrips);
   const [projects, setProjects] = useState<MockProject[]>(mockProjects);
@@ -272,9 +350,10 @@ export function MatthewOSDashboard() {
       setDocumentStatus("loading");
 
       try {
-        const [tasksResponse, notesResponse, documentsResponse] = await Promise.all([
+        const [tasksResponse, notesResponse, habitsResponse, documentsResponse] = await Promise.all([
           fetch("/api/tasks"),
           fetch("/api/notes"),
+          fetch("/api/habits"),
           fetch("/api/documents")
         ]);
 
@@ -288,12 +367,17 @@ export function MatthewOSDashboard() {
           setNotes(data.notes ?? mockNotes);
         }
 
+        if (habitsResponse.ok) {
+          const data = await habitsResponse.json() as { habits?: MockHabit[] };
+          setHabits(data.habits ?? mockHabits);
+        }
+
         if (documentsResponse.ok) {
           const data = await documentsResponse.json() as { documents?: MockDocument[] };
           setDocuments(data.documents ?? mockDocuments);
         }
 
-        setDataStatus(tasksResponse.ok && notesResponse.ok ? "connected" : "fallback");
+        setDataStatus(tasksResponse.ok && notesResponse.ok && habitsResponse.ok ? "connected" : "fallback");
         setDocumentStatus(documentsResponse.ok ? "connected" : "fallback");
         setActivity("Connected to MatthewOS APIs.");
       } catch {
@@ -394,6 +478,12 @@ export function MatthewOSDashboard() {
   const activeFeature = featureSections.find((section) => section.title === activeSection);
   const todayTasks = tasks.filter((task) => task.status === "Today").slice(0, 3);
   const recentNotes = notes.slice(0, 3);
+  const monthDays = useMemo(() => getMonthDays(), []);
+  const todayDateKey = formatDateKey(new Date());
+  const monthlyHabitAverage = habits.length
+    ? Math.round(habits.reduce((total, habit) => total + getHabitProgress(habit).percentage, 0) / habits.length)
+    : 0;
+  const todayHabitCheckins = habits.filter((habit) => habit.completions.includes(todayDateKey)).length;
   const documentCategories = ["All", ...Array.from(new Set(documents.map((document) => String(document.category))))];
   const filteredDocuments = documentCategory === "All" ? documents : documents.filter((document) => document.category === documentCategory);
   const openTasks = tasks.filter((task) => task.status !== "Done").length;
@@ -407,6 +497,7 @@ export function MatthewOSDashboard() {
     return [
       ...notes.map((item) => ({ type: "Note", title: item.title, detail: item.summary })),
       ...tasks.map((item) => ({ type: "Task", title: item.title, detail: `${item.area} / ${item.status}` })),
+      ...habits.map((item) => ({ type: "Habit", title: item.title, detail: `${item.frequency} / ${getHabitProgress(item).percentage}% this month` })),
       ...documents.map((item) => ({ type: "Document", title: item.title, detail: `${item.category} / ${item.type}` })),
       ...trips.map((item) => ({ type: "Trip", title: item.destination, detail: item.detail })),
       ...bookmarks.map((item) => ({ type: "Bookmark", title: item.title, detail: item.description })),
@@ -416,7 +507,7 @@ export function MatthewOSDashboard() {
     ]
       .filter((item) => `${item.type} ${item.title} ${item.detail}`.toLowerCase().includes(normalizedQuery))
       .slice(0, 10);
-  }, [bookmarks, documents, notes, query, resourceGroups, tasks, trips]);
+  }, [bookmarks, documents, habits, notes, query, resourceGroups, tasks, trips]);
 
   function openComposer(mode: ComposerMode, preset = "") {
     if (mode === "document") {
@@ -477,6 +568,12 @@ export function MatthewOSDashboard() {
       setActiveSection("Notes");
     }
 
+    if (mode === "habit") {
+      const habit = await createHabitFromValue(value, "Daily");
+      setHabits((current) => [habit, ...current]);
+      setActiveSection("Habits");
+    }
+
     if (mode === "trip") {
       setTrips((current) => [{ id, destination: value, dates: "TBD", status: "Idea", detail: "Captured trip idea ready for details." }, ...current]);
       setActiveSection("Travel");
@@ -501,6 +598,66 @@ export function MatthewOSDashboard() {
     }
 
     setActivity(`Saved "${value}" as ${composerLabels[mode].toLowerCase()}.`);
+  }
+
+  async function createHabitFromValue(title: string, frequency: MockHabitFrequency) {
+    const fallback: MockHabit = {
+      id: `habit-${Date.now()}`,
+      title,
+      frequency,
+      completions: [],
+      color: ["moss", "clay", "amber", "ink"][habits.length % 4] as MockHabit["color"]
+    };
+
+    try {
+      const response = await fetch("/api/habits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fallback)
+      });
+      const data = await response.json().catch(() => null) as { habit?: MockHabit } | null;
+      return data?.habit ?? fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  async function addHabit(title: string, frequency: MockHabitFrequency) {
+    const value = title.trim();
+
+    if (!value) {
+      setActivity("Add a habit name first.");
+      return;
+    }
+
+    const habit = await createHabitFromValue(value, frequency);
+    setHabits((current) => [habit, ...current]);
+    setActivity(`Started tracking "${habit.title}" ${habit.frequency.toLowerCase()}.`);
+  }
+
+  async function toggleHabitDay(id: string, completedOn: string) {
+    setHabits((current) =>
+      current.map((habit) => {
+        if (habit.id !== id) return habit;
+        const exists = habit.completions.includes(completedOn);
+        return {
+          ...habit,
+          completions: exists ? habit.completions.filter((date) => date !== completedOn) : [...habit.completions, completedOn]
+        };
+      })
+    );
+    setActivity("Habit check-in updated.");
+    await fetch(`/api/habits/${id}/checkins`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ completedOn })
+    }).catch(() => undefined);
+  }
+
+  async function removeHabit(id: string) {
+    setHabits((current) => current.filter((habit) => habit.id !== id));
+    setActivity("Habit removed.");
+    await fetch(`/api/habits/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
   function handleComposerSubmit(event: FormEvent<HTMLFormElement>) {
@@ -640,6 +797,101 @@ export function MatthewOSDashboard() {
     );
   }
 
+  function renderHabits() {
+    const frequencyOptions: MockHabitFrequency[] = ["Daily", "Weekdays", "3x/week", "2x/week", "Weekly"];
+
+    return (
+      <div className="space-y-5">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            const formData = new FormData(event.currentTarget);
+            void addHabit(String(formData.get("title") ?? ""), String(formData.get("frequency") ?? "Daily") as MockHabitFrequency);
+            event.currentTarget.reset();
+          }}
+          className="grid gap-2 rounded-lg border border-ink/10 bg-white/82 p-4 shadow-sm md:grid-cols-[1fr_180px_auto]"
+        >
+          <input name="title" placeholder="Add a habit to track..." className="rounded-md border border-ink/10 bg-white px-3 py-3 text-sm outline-none focus:border-clay focus:ring-4 focus:ring-clay/10" />
+          <select name="frequency" defaultValue="Daily" className="rounded-md border border-ink/10 bg-white px-3 py-3 text-sm font-semibold text-ink/70 outline-none">
+            {frequencyOptions.map((option) => <option key={option}>{option}</option>)}
+          </select>
+          <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper hover:bg-moss">
+            <Plus size={16} aria-hidden="true" />
+            Track Habit
+          </button>
+        </form>
+
+        <div className="grid gap-4 md:grid-cols-3">
+          <LightCard title={`${habits.length} tracked habits`} eyebrow={getMonthLabel()}>
+            Your monthly tracker uses frequency-based targets so each habit can have a different commitment level.
+          </LightCard>
+          <LightCard title={`${monthlyHabitAverage}% average progress`} eyebrow="Month">
+            Across all habits, based on completed check-ins compared with the target for each frequency.
+          </LightCard>
+          <LightCard title={`${todayHabitCheckins}/${habits.length} checked in today`} eyebrow="Today">
+            Tap today in any habit row to log or undo the check-in.
+          </LightCard>
+        </div>
+
+        <div className="space-y-4">
+          {habits.map((habit) => {
+            const progress = getHabitProgress(habit);
+
+            return (
+              <article key={habit.id} className="rounded-lg border border-ink/10 bg-white/84 p-4 shadow-sm">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-semibold text-ink">{habit.title}</h3>
+                      <Pill>{habit.frequency}</Pill>
+                      <Pill>{progress.completed}/{progress.target} this month</Pill>
+                      <Pill>{progress.streak} day streak</Pill>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-mist">
+                      <div className="h-full rounded-full bg-moss transition-all" style={{ width: `${progress.percentage}%` }} />
+                    </div>
+                    <p className="mt-2 text-sm text-ink/55">
+                      {progress.percentage}% complete / {progress.remaining ? `${progress.remaining} check-ins left for ${getMonthLabel()}` : "monthly target met"}
+                    </p>
+                  </div>
+                  <button type="button" onClick={() => void removeHabit(habit.id)} className="inline-flex items-center justify-center gap-2 rounded-md border border-ink/10 px-3 py-2 text-sm font-semibold text-ink/60 hover:bg-mist">
+                    <Trash2 size={15} aria-hidden="true" />
+                    Remove
+                  </button>
+                </div>
+
+                <div className="mt-4 grid grid-cols-7 gap-1.5 sm:grid-cols-10 md:grid-cols-12 xl:grid-cols-[repeat(16,minmax(0,1fr))]">
+                  {monthDays.map((day) => {
+                    const checked = habit.completions.includes(day.dateKey);
+                    return (
+                      <button
+                        key={day.dateKey}
+                        type="button"
+                        onClick={() => void toggleHabitDay(habit.id, day.dateKey)}
+                        aria-label={`${checked ? "Remove" : "Add"} ${habit.title} check-in for day ${day.day}`}
+                        className={`aspect-square rounded-md border text-xs font-semibold transition ${
+                          checked
+                            ? "border-moss bg-moss text-paper shadow-sm"
+                            : day.isToday
+                              ? "border-clay bg-clay/10 text-clay"
+                              : day.isFuture
+                                ? "border-ink/5 bg-mist/40 text-ink/30"
+                                : "border-ink/10 bg-mist/60 text-ink/55 hover:bg-white"
+                        }`}
+                      >
+                        {day.day}
+                      </button>
+                    );
+                  })}
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   function renderEditableResources(section: ResourceKey) {
     return (
       <div className="space-y-4">
@@ -690,6 +942,8 @@ export function MatthewOSDashboard() {
     }
 
     if (section.title === "Tasks") return renderTasks();
+
+    if (section.title === "Habits") return renderHabits();
 
     if (section.title === "Calendar") {
       return (
@@ -1001,9 +1255,10 @@ export function MatthewOSDashboard() {
                         <Pill>{getDateLabel()}</Pill>
                         <Pill>{weather ? `${weather.location} / ${weather.temperature}${weather.units.temperature} / ${weather.condition}` : weatherStatus}</Pill>
                         <Pill>{openTasks} open tasks</Pill>
+                        <Pill>{monthlyHabitAverage}% habit progress</Pill>
                       </div>
                       <p className="mt-5 max-w-2xl text-sm leading-6 text-ink/66">
-                        Today has {events.slice(0, 3).length} events, {todayTasks.length} top tasks, {documents.length} document records, and {trips.length} trips in the planning system.
+                        Today has {events.slice(0, 3).length} events, {todayTasks.length} top tasks, {todayHabitCheckins} habit check-ins, {documents.length} document records, and {trips.length} trips in the planning system.
                       </p>
                       <form onSubmit={handleWeatherSubmit} className="mt-5 grid gap-2 sm:grid-cols-[1fr_auto]">
                         <input value={weatherLocation} onChange={(event) => setWeatherLocation(event.target.value)} placeholder="Weather location" className="w-full rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none focus:border-clay focus:ring-4 focus:ring-clay/10" />
@@ -1051,6 +1306,7 @@ export function MatthewOSDashboard() {
 
                 <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <LightCard title="Recent Notes" eyebrow="Knowledge">{recentNotes.map((note) => note.title).join(" / ")}</LightCard>
+                  <LightCard title="Habit Tracker" eyebrow="Month">{habits.map((habit) => `${habit.title}: ${getHabitProgress(habit).percentage}%`).join(" / ")}</LightCard>
                   <LightCard title="Upcoming Trips" eyebrow="Travel">{trips.map((trip) => trip.destination).join(" / ")}</LightCard>
                   <LightCard title="Home Projects" eyebrow="Home">{projects.filter((project) => project.area === "Home").map((project) => project.title).join(" / ")}</LightCard>
                   <LightCard title="Recent Documents" eyebrow="Files">{documents.slice(0, 3).map((document) => document.title).join(" / ")}</LightCard>
@@ -1061,7 +1317,7 @@ export function MatthewOSDashboard() {
                 <section className="mt-6 rounded-lg border border-ink/10 bg-white/82 p-5 shadow-sm">
                   <div className="flex flex-wrap gap-2">
                     {quickActions.map((action) => {
-                      const mode: ComposerMode = action === "New Task" ? "task" : action === "Upload Document" ? "document" : action === "Add Trip" ? "trip" : action === "Add Home Project" ? "project" : action === "Add Bookmark" ? "bookmark" : "note";
+                      const mode: ComposerMode = action === "New Task" ? "task" : action === "Add Habit" ? "habit" : action === "Upload Document" ? "document" : action === "Add Trip" ? "trip" : action === "Add Home Project" ? "project" : action === "Add Bookmark" ? "bookmark" : "note";
                       return (
                         <button key={action} type="button" onClick={() => openComposer(mode)} className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-mist/60 px-3 py-2 text-sm font-semibold text-ink/65 hover:bg-white">
                           {action.includes("Upload") ? <UploadCloud size={16} /> : <FilePlus2 size={16} />}
@@ -1082,7 +1338,7 @@ export function MatthewOSDashboard() {
               </>
             ) : activeFeature ? (
               <section className="mt-6 space-y-5">
-                <SectionHeader section={activeFeature} onAdd={() => openComposer(activeFeature.title === "Documents" ? "document" : activeFeature.title === "Tasks" ? "task" : activeFeature.title === "Travel" ? "trip" : "note")} />
+                <SectionHeader section={activeFeature} onAdd={() => openComposer(activeFeature.title === "Documents" ? "document" : activeFeature.title === "Tasks" ? "task" : activeFeature.title === "Habits" ? "habit" : activeFeature.title === "Travel" ? "trip" : "note")} />
                 <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
                   <LightCard title="Section Contents" eyebrow="Scaffold">
                     <ul className="space-y-2">
@@ -1101,8 +1357,8 @@ export function MatthewOSDashboard() {
       </div>
 
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-ink/10 bg-paper/95 px-3 py-2 backdrop-blur lg:hidden">
-        <div className="mx-auto grid max-w-lg grid-cols-4 gap-2">
-          {(["Today", "Tasks", "Documents", "Settings"] as DashboardSectionKey[]).map((section) => (
+        <div className="mx-auto grid max-w-lg grid-cols-5 gap-2">
+          {(["Today", "Tasks", "Habits", "Documents", "Settings"] as DashboardSectionKey[]).map((section) => (
             <button key={section} type="button" onClick={() => setActiveSection(section)} className={`rounded-md px-2 py-2 text-xs font-semibold ${activeSection === section ? "bg-ink text-paper" : "text-ink/60"}`}>
               {section === "Settings" ? <Settings2 size={16} className="mx-auto mb-1" aria-hidden="true" /> : null}
               {section}

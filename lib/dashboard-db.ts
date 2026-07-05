@@ -1,8 +1,10 @@
 import {
   mockDocuments,
+  mockHabits,
   mockNotes,
   mockTasks,
   type MockDocument,
+  type MockHabit,
   type MockNote,
   type MockTask
 } from "@/data/matthewos";
@@ -35,6 +37,15 @@ type DocumentRow = {
   r2_key: string;
   content_type: string | null;
   size_bytes: number | null;
+  updated_at: string;
+};
+
+type HabitRow = {
+  id: string;
+  title: string;
+  frequency: MockHabit["frequency"];
+  color: MockHabit["color"] | null;
+  completions: string | null;
   updated_at: string;
 };
 
@@ -75,6 +86,16 @@ function toDocument(row: DocumentRow): MockDocument {
     type: row.content_type ?? "File",
     updatedAt: row.updated_at,
     owner: "Matthew"
+  };
+}
+
+function toHabit(row: HabitRow): MockHabit {
+  return {
+    id: row.id,
+    title: row.title,
+    frequency: row.frequency,
+    color: row.color ?? "moss",
+    completions: row.completions ? row.completions.split(",").filter(Boolean) : []
   };
 }
 
@@ -160,6 +181,105 @@ export async function deleteTask(id: string) {
 
   await db.prepare("DELETE FROM tasks WHERE id = ?").bind(id).run();
   return true;
+}
+
+export async function listHabits() {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return mockHabits;
+  }
+
+  try {
+    const { results = [] } = await db
+      .prepare(
+        `SELECT habits.id, habits.title, habits.frequency, habits.color, habits.updated_at,
+          GROUP_CONCAT(habit_checkins.completed_on) AS completions
+        FROM habits
+        LEFT JOIN habit_checkins ON habit_checkins.habit_id = habits.id
+        GROUP BY habits.id
+        ORDER BY habits.updated_at DESC`
+      )
+      .all<HabitRow>();
+
+    return results.length ? results.map(toHabit) : mockHabits;
+  } catch {
+    return mockHabits;
+  }
+}
+
+export async function createHabit(input: Partial<MockHabit>) {
+  const db = getDbOrNull();
+  const habit: MockHabit = {
+    id: input.id ?? createId("habit"),
+    title: input.title?.trim() || "Untitled habit",
+    frequency: input.frequency ?? "Daily",
+    color: input.color ?? "moss",
+    completions: input.completions ?? []
+  };
+
+  if (!db) {
+    return habit;
+  }
+
+  try {
+    await db
+      .prepare("INSERT INTO habits (id, title, frequency, color, created_at, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)")
+      .bind(habit.id, habit.title, habit.frequency, habit.color)
+      .run();
+  } catch {
+    return habit;
+  }
+
+  return habit;
+}
+
+export async function deleteHabit(id: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return true;
+  }
+
+  try {
+    await db.prepare("DELETE FROM habit_checkins WHERE habit_id = ?").bind(id).run();
+    await db.prepare("DELETE FROM habits WHERE id = ?").bind(id).run();
+  } catch {
+    return true;
+  }
+
+  return true;
+}
+
+export async function toggleHabitCheckin(id: string, completedOn: string) {
+  const db = getDbOrNull();
+
+  if (!db) {
+    return { id, completedOn };
+  }
+
+  try {
+    const existing = await db
+      .prepare("SELECT id FROM habit_checkins WHERE habit_id = ? AND completed_on = ?")
+      .bind(id, completedOn)
+      .first<{ id: string }>();
+
+    if (existing) {
+      await db.prepare("DELETE FROM habit_checkins WHERE id = ?").bind(existing.id).run();
+      await db.prepare("UPDATE habits SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id).run();
+      return { id, completedOn, completed: false };
+    }
+
+    await db
+      .prepare("INSERT INTO habit_checkins (id, habit_id, completed_on, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)")
+      .bind(createId("checkin"), id, completedOn)
+      .run();
+    await db.prepare("UPDATE habits SET updated_at = CURRENT_TIMESTAMP WHERE id = ?").bind(id).run();
+  } catch {
+    return { id, completedOn };
+  }
+
+  return { id, completedOn, completed: true };
 }
 
 export async function listNotes() {
