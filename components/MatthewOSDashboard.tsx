@@ -1403,6 +1403,9 @@ export function MatthewOSDashboard() {
                   <LightCard title="Recent Documents" eyebrow="Files">{documents.slice(0, 3).map((document) => document.title).join(" / ")}</LightCard>
                   <LightCard title="Universal Search" eyebrow="Working">Search filters across notes, tasks, documents, trips, bookmarks, and editable section items.</LightCard>
                   <LightCard title="Command Center" eyebrow="Cmd+K">Use the command button to add items into sections with natural language.</LightCard>
+                  <a href="/dashboard/westwall" className="text-left">
+                    <LightCard title="WestWall Display" eyebrow="Private Module">Manage the ESP32-S3 HUB75 matrix display, rotation screens, device token, commands, and preview.</LightCard>
+                  </a>
                 </section>
 
                 <section className="mt-6 rounded-lg border border-ink/10 bg-white/82 p-5 shadow-sm">
