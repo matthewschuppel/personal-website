@@ -103,6 +103,7 @@ export type WestWallCommandLog = {
   command: string;
   status: "queued" | "sent" | "acknowledged" | "failed";
   createdAt: string;
+  payload?: string;
 };
 
 export type WestWallDeviceCheckin = {
@@ -115,6 +116,16 @@ export type WestWallDeviceCheckin = {
   createdAt: string;
 };
 
+export type WestWallCustomMessage = {
+  id: string;
+  title: string;
+  message: string;
+  enabled: boolean;
+  startsAt: string;
+  endsAt: string;
+  priority: number;
+};
+
 export type WestWallDashboardData = {
   device: WestWallDevice;
   rotation: WestWallRotationScreen[];
@@ -125,6 +136,7 @@ export type WestWallDashboardData = {
   appearance: WestWallAppearanceSettings;
   commands: WestWallCommandLog[];
   checkins: WestWallDeviceCheckin[];
+  messages: WestWallCustomMessage[];
 };
 
 export const mockWestWallDevice: WestWallDevice = {
@@ -218,6 +230,18 @@ export const mockWestWallCheckins: WestWallDeviceCheckin[] = [
   { id: "checkin-001", firmwareVersion: "0.1.0-dev", wifiRssi: -58, uptimeSeconds: 0, freeMemoryBytes: 183500, currentScreen: "Weather", createdAt: "Mock data" }
 ];
 
+export const mockWestWallMessages: WestWallCustomMessage[] = [
+  {
+    id: "message-001",
+    title: "Welcome Home",
+    message: "Welcome home, Matthew",
+    enabled: true,
+    startsAt: "",
+    endsAt: "",
+    priority: 1
+  }
+];
+
 export const mockWestWallData: WestWallDashboardData = {
   device: mockWestWallDevice,
   rotation: mockWestWallRotation,
@@ -227,5 +251,6 @@ export const mockWestWallData: WestWallDashboardData = {
   weatherLocations: mockWestWallWeatherLocations,
   appearance: mockWestWallAppearance,
   commands: mockWestWallCommands,
-  checkins: mockWestWallCheckins
+  checkins: mockWestWallCheckins,
+  messages: mockWestWallMessages
 };

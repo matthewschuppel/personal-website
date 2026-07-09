@@ -25,7 +25,7 @@ import {
   type WestWallRotationScreen
 } from "@/data/westwall";
 
-const tabs = ["Overview", "Rotation", "Flights", "Stocks", "Weather", "Locations", "Appearance", "Device Settings", "Logs"] as const;
+const extendedTabs = ["Overview", "Rotation", "Messages", "Flights", "Stocks", "Weather", "Locations", "Appearance", "Device Settings", "Firmware", "Logs"] as const;
 
 function Panel({ title, eyebrow, children }: { title: string; eyebrow?: string; children: ReactNode }) {
   return (
@@ -81,7 +81,7 @@ function asNumber(value: FormDataEntryValue | null, fallback: number) {
 
 export function WestWallDisplayManager() {
   const [data, setData] = useState<WestWallDashboardData>(mockWestWallData);
-  const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Overview");
+  const [activeTab, setActiveTab] = useState<(typeof extendedTabs)[number]>("Overview");
   const [activity, setActivity] = useState("Ready.");
   const [deviceToken, setDeviceToken] = useState("");
 
@@ -104,7 +104,8 @@ export function WestWallDisplayManager() {
 
   const previewLines = useMemo(() => {
     const enabled = data.rotation.filter((screen) => screen.enabled).sort((a, b) => a.priority - b.priority);
-    return [enabled[0]?.preview ?? "WestWall Ready", data.stocks.filter((stock) => stock.enabled).map((stock) => stock.symbol).join("  "), data.weatherLocations.find((location) => location.isDefault)?.name ?? "Dallas, TX"];
+    const scheduled = data.messages.find((message) => message.enabled);
+    return [scheduled?.message ?? enabled[0]?.preview ?? "WestWall Ready", data.stocks.filter((stock) => stock.enabled).map((stock) => stock.symbol).join("  "), data.weatherLocations.find((location) => location.isDefault)?.name ?? "Dallas, TX"];
   }, [data]);
 
   async function saveRotation(nextRotation: WestWallRotationScreen[]) {
@@ -195,6 +196,26 @@ export function WestWallDisplayManager() {
     await loadWestWall();
   }
 
+  async function addMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const response = await fetch("/api/westwall/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: form.get("title"),
+        message: form.get("message"),
+        startsAt: form.get("startsAt"),
+        endsAt: form.get("endsAt"),
+        priority: asNumber(form.get("priority"), 1),
+        enabled: form.get("enabled") === "on"
+      })
+    });
+    event.currentTarget.reset();
+    setActivity(response.ok ? "Custom WestWall message scheduled." : "Message save failed.");
+    await loadWestWall();
+  }
+
   async function saveAppearance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -230,7 +251,7 @@ export function WestWallDisplayManager() {
                 Manage an ESP32-S3 HUB75 128x64 LED matrix display with rotating flights, aircraft, stocks, weather, clock, calendar, and custom dashboard screens.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {tabs.map((tab) => (
+                {extendedTabs.map((tab) => (
                   <button key={tab} type="button" onClick={() => setActiveTab(tab)} className={`rounded-md px-3 py-2 text-sm font-semibold ${activeTab === tab ? "bg-ink text-paper" : "bg-mist text-ink/65 hover:bg-white"}`}>
                     {tab}
                   </button>
@@ -250,7 +271,7 @@ export function WestWallDisplayManager() {
           <Metric label="Wi-Fi RSSI" value={`${data.device.wifiRssi} dBm`} icon={<Signal size={17} />} />
           <Metric label="Firmware" value={data.device.firmwareVersion} icon={<Settings2 size={17} />} />
           <Metric label="Enabled screens" value={`${data.rotation.filter((screen) => screen.enabled).length}/${data.rotation.length}`} icon={<RotateCw size={17} />} />
-          <Metric label="Panel" value="ESP32-S3 / HUB75" icon={<Sparkles size={17} />} />
+          <Metric label="Heartbeat" value={data.device.status === "online" ? "Fresh" : "Stale"} icon={<Sparkles size={17} />} />
         </section>
 
         {activeTab === "Overview" ? (
@@ -273,6 +294,33 @@ export function WestWallDisplayManager() {
             </Panel>
             <Panel title="Current Payload Preview" eyebrow="ESP32 JSON">
               <pre className="max-h-64 overflow-auto rounded-md bg-ink p-4 text-xs leading-5 text-paper">{JSON.stringify({ screen: data.rotation.find((screen) => screen.enabled)?.key, lines: previewLines, brightness: data.appearance.globalBrightness }, null, 2)}</pre>
+            </Panel>
+          </section>
+        ) : null}
+
+        {activeTab === "Messages" ? (
+          <section className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <Panel title="Custom Screen Composer" eyebrow="Scheduled messages">
+              <form onSubmit={addMessage} className="grid gap-2">
+                <input name="title" placeholder="Message title" className="rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" />
+                <textarea name="message" placeholder="Message shown on WestWall" className="min-h-24 rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" />
+                <input name="startsAt" type="datetime-local" className="rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" />
+                <input name="endsAt" type="datetime-local" className="rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" />
+                <input name="priority" placeholder="Priority" defaultValue="1" className="rounded-md border border-ink/10 bg-white px-3 py-2 text-sm" />
+                <label className="flex items-center gap-2 text-sm"><input name="enabled" type="checkbox" defaultChecked /> Enabled</label>
+                <button type="submit" className="rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper">Schedule Message</button>
+              </form>
+            </Panel>
+            <Panel title="Message Queue" eyebrow="Custom display screens">
+              <div className="space-y-3">
+                {data.messages.map((message) => (
+                  <div key={message.id} className="rounded-lg bg-mist/60 p-3">
+                    <p className="font-semibold">{message.title}</p>
+                    <p className="text-sm text-ink/60">{message.message}</p>
+                    <p className="mt-1 text-xs text-ink/45">Priority {message.priority} / {message.enabled ? "enabled" : "disabled"} / {message.startsAt || "now"} to {message.endsAt || "open"}</p>
+                  </div>
+                ))}
+              </div>
             </Panel>
           </section>
         ) : null}
@@ -419,6 +467,32 @@ export function WestWallDisplayManager() {
             </div>
             <p className="mt-3 text-sm leading-6 text-ink/60">For production firmware, set `WESTWALL_DEVICE_TOKEN` in Cloudflare and send it from the ESP32 as `Authorization: Bearer token` or `x-westwall-token`. Do not put this token on public pages.</p>
           </Panel>
+        ) : null}
+
+        {activeTab === "Firmware" ? (
+          <section className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+            <Panel title="ESP32 Firmware Setup" eyebrow="Ready-to-paste config">
+              <pre className="overflow-auto rounded-md bg-ink p-4 text-xs leading-5 text-paper">{`#define WESTWALL_API_BASE "https://matthewschuppel.com"
+#define WESTWALL_CONFIG_PATH "/api/westwall/config"
+#define WESTWALL_CURRENT_PATH "/api/westwall/current"
+#define WESTWALL_CHECKIN_PATH "/api/westwall/checkin"
+#define WESTWALL_PENDING_COMMANDS_PATH "/api/westwall/commands/pending"
+#define WESTWALL_COMMAND_ACK_PATH "/api/westwall/commands/ack"
+#define WESTWALL_DEVICE_TOKEN "<set in Cloudflare>"
+#define PANEL_WIDTH 128
+#define PANEL_HEIGHT 64
+#define PANEL_CHAIN 1`}</pre>
+            </Panel>
+            <Panel title="Device Polling Flow" eyebrow="Command queue">
+              <ol className="space-y-2 text-sm leading-6 text-ink/65">
+                <li>1. ESP32 calls `/api/westwall/config` at boot.</li>
+                <li>2. ESP32 calls `/api/westwall/current` for the current render payload.</li>
+                <li>3. ESP32 posts `/api/westwall/checkin` every 30-60 seconds.</li>
+                <li>4. ESP32 polls `/api/westwall/commands/pending` and executes queued commands.</li>
+                <li>5. ESP32 posts `/api/westwall/commands/ack` after command execution.</li>
+              </ol>
+            </Panel>
+          </section>
         ) : null}
 
         {activeTab === "Logs" ? (

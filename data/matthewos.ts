@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Camera,
   CheckSquare,
+  Database,
   FileText,
   Heart,
   Home,
@@ -13,6 +14,7 @@ import {
   Plane,
   Repeat2,
   Settings,
+  ShieldCheck,
   Sun
 } from "lucide-react";
 
@@ -30,6 +32,8 @@ export type DashboardSectionKey =
   | "Wedding"
   | "Finance"
   | "Knowledge Library"
+  | "Database"
+  | "System"
   | "Settings";
 
 export type DashboardNavItem = {
@@ -139,6 +143,8 @@ export const osNavigation: DashboardNavItem[] = [
   { label: "Wedding", icon: Heart },
   { label: "Finance", icon: Landmark },
   { label: "Knowledge Library", icon: BookOpen },
+  { label: "Database", icon: Database },
+  { label: "System", icon: ShieldCheck },
   { label: "Settings", icon: Settings }
 ];
 
@@ -542,6 +548,16 @@ export const featureSections: FeatureSection[] = [
     title: "Knowledge Library",
     description: "A searchable library for notes, bookmarks, ideas, quotes, and conversations.",
     items: ["Notes", "Bookmarks", "Articles", "Recipes", "Ideas", "Quotes", "AI conversations"]
+  },
+  {
+    title: "Database",
+    description: "A unified Notion-style view across tasks, notes, documents, travel, resources, habits, and WestWall.",
+    items: ["Table view", "Cross-module search", "Filters", "Calendar draft staging", "AI import results"]
+  },
+  {
+    title: "System",
+    description: "A private status and readiness page for integrations, storage, APIs, and device health.",
+    items: ["D1 status", "R2 status", "Calendar integration", "AI readiness", "WestWall heartbeat"]
   },
   {
     title: "Settings",

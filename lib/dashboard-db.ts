@@ -742,6 +742,31 @@ export async function deleteResource(id: string) {
   return true;
 }
 
+export async function updateResource(id: string, input: Partial<MockResource>) {
+  const db = getDbOrNull();
+  const resource: MockResource = {
+    id,
+    title: input.title?.trim() || "Untitled item",
+    detail: input.detail ?? "Add details later.",
+    status: input.status ?? "Updated"
+  };
+
+  if (!db) {
+    return resource;
+  }
+
+  try {
+    await db
+      .prepare("UPDATE dashboard_resources SET title = ?, detail = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .bind(resource.title, resource.detail, resource.status, id)
+      .run();
+  } catch {
+    return resource;
+  }
+
+  return resource;
+}
+
 export async function getDashboardSettings() {
   const db = getDbOrNull();
 

@@ -5,6 +5,7 @@ import {
   mockWestWallDevice,
   mockWestWallFlights,
   mockWestWallLocations,
+  mockWestWallMessages,
   mockWestWallRotation,
   mockWestWallStocks,
   mockWestWallWeatherLocations,
@@ -13,6 +14,7 @@ import {
   type WestWallDashboardData,
   type WestWallDevice,
   type WestWallDeviceCheckin,
+  type WestWallCustomMessage,
   type WestWallRotationScreen,
   type WestWallSavedLocation,
   type WestWallStockTicker,
@@ -117,6 +119,7 @@ type CommandRow = {
   id: string;
   command: string;
   status: WestWallCommandLog["status"];
+  payload: string | null;
   created_at: string;
 };
 
@@ -130,6 +133,16 @@ type CheckinRow = {
   created_at: string;
 };
 
+type MessageRow = {
+  id: string;
+  title: string;
+  message: string;
+  enabled: number;
+  starts_at: string | null;
+  ends_at: string | null;
+  priority: number;
+};
+
 function getDbOrNull() {
   return getD1Database();
 }
@@ -139,11 +152,14 @@ function bool(value: boolean) {
 }
 
 function toDevice(row: DeviceRow): WestWallDevice {
+  const lastCheckInMs = row.last_check_in ? Date.parse(row.last_check_in) : 0;
+  const isFresh = lastCheckInMs > 0 && Date.now() - lastCheckInMs < 5 * 60 * 1000;
+
   return {
     id: row.id,
     name: row.name,
     slug: row.slug,
-    status: row.status,
+    status: isFresh ? row.status : "offline",
     lastCheckIn: row.last_check_in ?? "Waiting for first ESP32 check-in",
     activeScreen: row.active_screen ?? "Weather",
     brightness: row.brightness,
@@ -247,7 +263,8 @@ function toCommand(row: CommandRow): WestWallCommandLog {
     id: row.id,
     command: row.command,
     status: row.status,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    payload: row.payload ?? undefined
   };
 }
 
@@ -260,6 +277,18 @@ function toCheckin(row: CheckinRow): WestWallDeviceCheckin {
     freeMemoryBytes: row.free_memory_bytes ?? 0,
     currentScreen: row.current_screen ?? "Unknown",
     createdAt: row.created_at
+  };
+}
+
+function toMessage(row: MessageRow): WestWallCustomMessage {
+  return {
+    id: row.id,
+    title: row.title,
+    message: row.message,
+    enabled: Boolean(row.enabled),
+    startsAt: row.starts_at ?? "",
+    endsAt: row.ends_at ?? "",
+    priority: row.priority
   };
 }
 
@@ -308,6 +337,10 @@ export async function ensureWestWallSeeded() {
   for (const location of mockWestWallWeatherLocations) {
     await createWestWallWeatherLocation(location);
   }
+
+  for (const message of mockWestWallMessages) {
+    await createWestWallMessage(message);
+  }
 }
 
 export async function getWestWallDashboardData(): Promise<WestWallDashboardData> {
@@ -325,8 +358,9 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
     const { results: locationRows = [] } = await db.prepare("SELECT id, name, latitude, longitude, radius_miles, altitude_filter, airline_filter, aircraft_type_filter, refresh_interval_seconds, data_source, is_default FROM westwall_saved_locations WHERE device_id = ? ORDER BY is_default DESC, name ASC").bind(DEFAULT_DEVICE_ID).all<LocationRow>();
     const { results: tickerRows = [] } = await db.prepare("SELECT id, symbol, label, enabled, asset_type, show_price, show_change, show_percent_change, show_trend_arrow, refresh_interval_seconds, priority FROM westwall_stock_tickers WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<TickerRow>();
     const { results: weatherRows = [] } = await db.prepare("SELECT id, name, latitude, longitude, is_default FROM westwall_weather_locations WHERE device_id = ? ORDER BY is_default DESC, name ASC").bind(DEFAULT_DEVICE_ID).all<WeatherLocationRow>();
-    const { results: commandRows = [] } = await db.prepare("SELECT id, command, status, created_at FROM westwall_command_logs WHERE device_id = ? ORDER BY created_at DESC LIMIT 10").bind(DEFAULT_DEVICE_ID).all<CommandRow>();
+    const { results: commandRows = [] } = await db.prepare("SELECT id, command, payload, status, created_at FROM westwall_command_logs WHERE device_id = ? ORDER BY created_at DESC LIMIT 10").bind(DEFAULT_DEVICE_ID).all<CommandRow>();
     const { results: checkinRows = [] } = await db.prepare("SELECT id, firmware_version, wifi_rssi, uptime_seconds, free_memory_bytes, current_screen, created_at FROM westwall_device_checkins WHERE device_id = ? ORDER BY created_at DESC LIMIT 10").bind(DEFAULT_DEVICE_ID).all<CheckinRow>();
+    const { results: messageRows = [] } = await db.prepare("SELECT id, title, message, enabled, starts_at, ends_at, priority FROM westwall_custom_messages WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<MessageRow>();
 
     return {
       device: deviceRow ? toDevice(deviceRow) : mockWestWallDevice,
@@ -337,7 +371,8 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
       weatherLocations: weatherRows.length ? weatherRows.map(toWeatherLocation) : mockWestWallWeatherLocations,
       appearance: settingsRow ? toAppearance(settingsRow) : mockWestWallAppearance,
       commands: commandRows.length ? commandRows.map(toCommand) : mockWestWallCommands,
-      checkins: checkinRows.length ? checkinRows.map(toCheckin) : mockWestWallData.checkins
+      checkins: checkinRows.length ? checkinRows.map(toCheckin) : mockWestWallData.checkins,
+      messages: messageRows.length ? messageRows.map(toMessage) : mockWestWallMessages
     };
   } catch {
     return mockWestWallData;
@@ -473,6 +508,52 @@ export async function queueWestWallCommand(command: string, payload: unknown = {
   return log;
 }
 
+export async function listPendingWestWallCommands() {
+  const db = getDbOrNull();
+
+  if (!db) return mockWestWallCommands.filter((command) => command.status === "queued");
+
+  await ensureWestWallSeeded();
+  const { results = [] } = await db
+    .prepare("SELECT id, command, payload, status, created_at FROM westwall_command_logs WHERE device_id = ? AND status = ? ORDER BY created_at ASC LIMIT 5")
+    .bind(DEFAULT_DEVICE_ID, "queued")
+    .all<CommandRow>();
+
+  await db.prepare("UPDATE westwall_command_logs SET status = ? WHERE device_id = ? AND status = ?").bind("sent", DEFAULT_DEVICE_ID, "queued").run();
+  return results.map(toCommand);
+}
+
+export async function acknowledgeWestWallCommand(id: string, status: WestWallCommandLog["status"] = "acknowledged") {
+  const db = getDbOrNull();
+
+  if (!db) return true;
+
+  await db.prepare("UPDATE westwall_command_logs SET status = ? WHERE id = ? AND device_id = ?").bind(status, id, DEFAULT_DEVICE_ID).run();
+  return true;
+}
+
+export async function createWestWallMessage(input: Partial<WestWallCustomMessage>) {
+  const db = getDbOrNull();
+  const message: WestWallCustomMessage = {
+    id: input.id ?? createId("westwall-message"),
+    title: input.title?.trim() || "Custom message",
+    message: input.message?.trim() || "WestWall message",
+    enabled: input.enabled ?? true,
+    startsAt: input.startsAt ?? "",
+    endsAt: input.endsAt ?? "",
+    priority: Number(input.priority ?? 1)
+  };
+
+  if (!db) return message;
+
+  await db
+    .prepare("INSERT INTO westwall_custom_messages (id, device_id, title, message, enabled, starts_at, ends_at, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(message.id, DEFAULT_DEVICE_ID, message.title, message.message, bool(message.enabled), message.startsAt || null, message.endsAt || null, message.priority)
+    .run();
+
+  return message;
+}
+
 export async function recordWestWallCheckin(input: Partial<WestWallDeviceCheckin>) {
   const db = getDbOrNull();
   const checkin: WestWallDeviceCheckin = {
@@ -573,13 +654,18 @@ export async function buildWestWallDeviceConfig() {
 
 export async function buildWestWallCurrentPayload() {
   const data = await getWestWallDashboardData();
-  const active = data.rotation.find((screen) => screen.enabled) ?? data.rotation[0];
+  const now = Date.now();
+  const scheduledMessage = data.messages
+    .filter((message) => message.enabled)
+    .filter((message) => (!message.startsAt || Date.parse(message.startsAt) <= now) && (!message.endsAt || Date.parse(message.endsAt) >= now))
+    .sort((a, b) => a.priority - b.priority)[0];
+  const active = scheduledMessage ? data.rotation.find((screen) => screen.key === "custom-message") : data.rotation.find((screen) => screen.enabled) ?? data.rotation[0];
 
   return {
-    screen: active?.key ?? "clock",
-    label: active?.label ?? "Clock",
+    screen: scheduledMessage ? "custom-message" : active?.key ?? "clock",
+    label: scheduledMessage?.title ?? active?.label ?? "Clock",
     lines: [
-      active?.preview ?? "WestWall Ready",
+      scheduledMessage?.message ?? active?.preview ?? "WestWall Ready",
       data.stocks.filter((stock) => stock.enabled).slice(0, 3).map((stock) => stock.symbol).join("  "),
       data.weatherLocations.find((location) => location.isDefault)?.name ?? "Dallas, TX"
     ].filter(Boolean),

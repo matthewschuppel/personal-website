@@ -4,9 +4,11 @@ import type { FormEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDownToLine,
+  Brain,
   CalendarDays,
   Check,
   Command,
+  Edit3,
   FilePlus2,
   Menu,
   Plus,
@@ -51,6 +53,22 @@ import {
 type ComposerMode = "note" | "task" | "habit" | "document" | "trip" | "project" | "bookmark";
 type ResourceKey = "Home" | "Work" | "Photography" | "Wedding" | "Finance" | "Knowledge Library";
 type ConnectionState = "loading" | "connected" | "fallback" | "error";
+
+type UnifiedItem = {
+  id: string;
+  type: string;
+  title: string;
+  detail: string;
+  section: string;
+  status: string;
+  sourceId: string;
+};
+
+type AuditCheck = {
+  label: string;
+  status: string;
+  detail: string;
+};
 
 type WeatherState = {
   location: string;
@@ -321,6 +339,10 @@ export function MatthewOSDashboard() {
   const [weather, setWeather] = useState<WeatherState | null>(null);
   const [weatherStatus, setWeatherStatus] = useState("Loading weather...");
   const [weatherConnection, setWeatherConnection] = useState<ConnectionState>("loading");
+  const [unifiedItems, setUnifiedItems] = useState<UnifiedItem[]>([]);
+  const [auditChecks, setAuditChecks] = useState<AuditCheck[]>([]);
+  const [aiInput, setAiInput] = useState("");
+  const [aiResult, setAiResult] = useState("");
 
   function updateSettings(nextSettings: DashboardSettings) {
     setSettings(nextSettings);
@@ -437,6 +459,31 @@ export function MatthewOSDashboard() {
     void loadDashboardData();
   }, []);
 
+  useEffect(() => {
+    async function loadOperationalData() {
+      try {
+        const [unifiedResponse, auditResponse] = await Promise.all([
+          fetch("/api/dashboard/unified"),
+          fetch("/api/dashboard/audit")
+        ]);
+
+        if (unifiedResponse.ok) {
+          const data = await unifiedResponse.json() as { items?: UnifiedItem[] };
+          setUnifiedItems(data.items ?? []);
+        }
+
+        if (auditResponse.ok) {
+          const data = await auditResponse.json() as { audit?: { checks?: AuditCheck[] } };
+          setAuditChecks(data.audit?.checks ?? []);
+        }
+      } catch {
+        setAuditChecks([{ label: "Operational data", status: "fallback", detail: "Audit APIs are unavailable in this environment." }]);
+      }
+    }
+
+    void loadOperationalData();
+  }, [activity]);
+
   const loadCalendar = useCallback(async ({ refresh = false }: { refresh?: boolean } = {}) => {
     setCalendarConnection("loading");
     setCalendarStatus(refresh ? "Resyncing Apple Calendar..." : "Loading Apple Calendar...");
@@ -548,13 +595,14 @@ export function MatthewOSDashboard() {
       ...documents.map((item) => ({ type: "Document", title: item.title, detail: `${item.category} / ${item.type}` })),
       ...trips.map((item) => ({ type: "Trip", title: item.destination, detail: item.detail })),
       ...bookmarks.map((item) => ({ type: "Bookmark", title: item.title, detail: item.description })),
+      ...unifiedItems.map((item) => ({ type: item.type, title: item.title, detail: `${item.section} / ${item.detail} / ${item.status}` })),
       ...Object.entries(resourceGroups).flatMap(([section, resources]) =>
         resources.map((item) => ({ type: section, title: item.title, detail: item.detail }))
       )
     ]
       .filter((item) => `${item.type} ${item.title} ${item.detail}`.toLowerCase().includes(normalizedQuery))
       .slice(0, 10);
-  }, [bookmarks, documents, habits, notes, query, resourceGroups, tasks, trips]);
+  }, [bookmarks, documents, habits, notes, query, resourceGroups, tasks, trips, unifiedItems]);
 
   function openComposer(mode: ComposerMode, preset = "") {
     if (mode === "document") {
@@ -827,6 +875,63 @@ export function MatthewOSDashboard() {
     await fetch(`/api/resources/${id}`, { method: "DELETE" }).catch(() => undefined);
   }
 
+  async function editEditableResource(section: ResourceKey, resource: MockResource) {
+    const nextTitle = window.prompt("Item title", resource.title)?.trim();
+
+    if (!nextTitle) return;
+
+    const nextDetail = window.prompt("Item details", resource.detail)?.trim() || resource.detail;
+    const nextStatus = window.prompt("Status or label", resource.status)?.trim() || resource.status;
+    const nextResource = { ...resource, title: nextTitle, detail: nextDetail, status: nextStatus };
+
+    setResourceGroups((current) => ({
+      ...current,
+      [section]: current[section].map((item) => (item.id === resource.id ? nextResource : item))
+    }));
+
+    await fetch(`/api/resources/${resource.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(nextResource)
+    }).catch(() => undefined);
+    setActivity(`Updated "${nextTitle}" in ${section}.`);
+  }
+
+  async function createCalendarDraftFromItem(item: UnifiedItem) {
+    const title = window.prompt("Calendar event title", item.title)?.trim();
+
+    if (!title) return;
+
+    const startsAt = window.prompt("Start date/time", new Date().toISOString().slice(0, 16))?.trim() || "";
+    const response = await fetch("/api/calendar/drafts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, startsAt, notes: item.detail, sourceItemType: item.type, sourceItemId: item.sourceId })
+    }).catch(() => null);
+
+    setActivity(response?.ok ? "Calendar draft created. Connect a write-capable calendar provider later to push it automatically." : "Calendar draft failed.");
+  }
+
+  async function organizeWithAi() {
+    const value = aiInput.trim();
+
+    if (!value) {
+      setAiResult("Paste or type something first.");
+      return;
+    }
+
+    const response = await fetch("/api/dashboard/organize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value })
+    }).catch(() => null);
+    const data = await response?.json().catch(() => null) as { result?: { category: string; reason: string; tags: string[] } } | null;
+
+    setAiResult(data?.result ? `Saved as ${data.result.category}. ${data.result.reason}` : "Organizer failed.");
+    setAiInput("");
+    setActivity("AI organize captured an item into MatthewOS.");
+  }
+
   function executeCommand() {
     const value = commandText.trim();
 
@@ -994,10 +1099,16 @@ export function MatthewOSDashboard() {
           {resourceGroups[section].map((resource) => (
             <LightCard key={resource.id} title={resource.title} eyebrow={section} meta={resource.status} compact={compact}>
               <p>{resource.detail}</p>
-              <button type="button" onClick={() => void removeEditableResource(section, resource.id)} className="mt-3 inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-clay">
-                <Trash2 size={13} aria-hidden="true" />
-                Remove
-              </button>
+              <div className="mt-3 flex flex-wrap gap-3">
+                <button type="button" onClick={() => void editEditableResource(section, resource)} className="inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-moss">
+                  <Edit3 size={13} aria-hidden="true" />
+                  Edit
+                </button>
+                <button type="button" onClick={() => void removeEditableResource(section, resource.id)} className="inline-flex items-center gap-2 text-xs font-semibold text-ink/55 hover:text-clay">
+                  <Trash2 size={13} aria-hidden="true" />
+                  Remove
+                </button>
+              </div>
             </LightCard>
           ))}
         </div>
@@ -1133,6 +1244,69 @@ export function MatthewOSDashboard() {
 
     if (["Home", "Work", "Photography", "Wedding", "Finance", "Knowledge Library"].includes(section.title)) {
       return renderEditableResources(section.title as ResourceKey);
+    }
+
+    if (section.title === "Database") {
+      const types = Array.from(new Set(unifiedItems.map((item) => item.type)));
+
+      return (
+        <div className="space-y-4">
+          <div className="rounded-lg border border-ink/10 bg-white/82 p-4 shadow-sm">
+            <p className="text-sm leading-6 text-ink/60">
+              Unified database view across MatthewOS modules. Use search above to filter across this index, or create a calendar draft from any item.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {types.map((type) => <Pill key={type}>{type}</Pill>)}
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-ink/10 bg-white/82 shadow-sm">
+            <div className="grid grid-cols-[1fr_120px_140px_120px] gap-3 border-b border-ink/10 bg-mist/70 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink/50">
+              <span>Item</span>
+              <span>Type</span>
+              <span>Section</span>
+              <span>Action</span>
+            </div>
+            {unifiedItems.slice(0, 60).map((item) => (
+              <div key={item.id} className="grid gap-3 border-b border-ink/10 px-4 py-3 text-sm last:border-b-0 md:grid-cols-[1fr_120px_140px_120px]">
+                <div>
+                  <p className="font-semibold text-ink">{item.title}</p>
+                  <p className="mt-1 text-ink/55">{item.detail}</p>
+                </div>
+                <span>{item.type}</span>
+                <span>{item.section}</span>
+                <button type="button" onClick={() => void createCalendarDraftFromItem(item)} className="rounded-md border border-ink/10 px-3 py-2 text-xs font-semibold text-ink/60 hover:bg-mist">
+                  Calendar Draft
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (section.title === "System") {
+      return (
+        <div className="grid gap-4 md:grid-cols-2">
+          {auditChecks.map((check) => (
+            <LightCard key={check.label} title={check.label} eyebrow="Audit" meta={check.status} compact={compact}>
+              {check.detail}
+            </LightCard>
+          ))}
+          <LightCard title="AI Organize / Import" eyebrow="Smart Capture">
+            <div className="grid gap-3">
+              <textarea value={aiInput} onChange={(event) => setAiInput(event.target.value)} placeholder="Paste a messy note, link, travel detail, project idea, or task..." className="min-h-28 rounded-md border border-ink/10 bg-white px-3 py-3 text-sm outline-none focus:border-clay focus:ring-4 focus:ring-clay/10" />
+              <button type="button" onClick={() => void organizeWithAi()} className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper hover:bg-moss">
+                <Brain size={16} aria-hidden="true" />
+                Organize Into MatthewOS
+              </button>
+              {aiResult ? <p className="text-sm text-ink/55">{aiResult}</p> : null}
+            </div>
+          </LightCard>
+          <LightCard title="Calendar Write-Back" eyebrow="Staged">
+            Calendar write-back is currently implemented as D1 calendar drafts. A future provider can push these drafts to Apple, Google, or another calendar API once write credentials are configured.
+          </LightCard>
+        </div>
+      );
     }
 
     return (
