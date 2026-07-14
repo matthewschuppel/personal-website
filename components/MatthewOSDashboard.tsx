@@ -1136,6 +1136,21 @@ export function MatthewOSDashboard() {
 
     if (section.title === "Habits") return renderHabits();
 
+    if (section.title === "Health") {
+      return (
+        <div className="grid gap-4 md:grid-cols-2">
+          <a href="/dashboard/health" className="text-left">
+            <LightCard title="Open Health Dashboard" eyebrow="Private Module" compact={compact}>
+              Workout planning, nutrition tracking, grocery lists, pantry, progress photos, reminders, and wedding health goals now live in the dedicated Health module.
+            </LightCard>
+          </a>
+          <LightCard title="Persistent Health Data" eyebrow="D1 + R2" compact={compact}>
+            Health records are scaffolded for Cloudflare D1, while private progress photos are prepared for Cloudflare R2 through the dashboard bucket binding.
+          </LightCard>
+        </div>
+      );
+    }
+
     if (section.title === "Calendar") {
       return (
         <div className="space-y-4">
@@ -1577,6 +1592,9 @@ export function MatthewOSDashboard() {
                   <LightCard title="Recent Documents" eyebrow="Files">{documents.slice(0, 3).map((document) => document.title).join(" / ")}</LightCard>
                   <LightCard title="Universal Search" eyebrow="Working">Search filters across notes, tasks, documents, trips, bookmarks, and editable section items.</LightCard>
                   <LightCard title="Command Center" eyebrow="Cmd+K">Use the command button to add items into sections with natural language.</LightCard>
+                  <a href="/dashboard/health" className="text-left">
+                    <LightCard title="Health Dashboard" eyebrow="Private Module">Track workouts, meals, groceries, pantry, body metrics, progress photos, reminders, and wedding health goals.</LightCard>
+                  </a>
                   <a href="/dashboard/westwall" className="text-left">
                     <LightCard title="WestWall Display" eyebrow="Private Module">Manage the ESP32-S3 HUB75 matrix display, rotation screens, device token, commands, and preview.</LightCard>
                   </a>

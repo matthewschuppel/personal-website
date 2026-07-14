@@ -15,6 +15,8 @@ Public routes:
 Private route:
 
 - `/dashboard`
+- `/dashboard/health`
+- `/dashboard/westwall`
 
 The public pages stay minimal and professional. MatthewOS is intentionally separated under
 `/dashboard` so dashboard data is not exposed in public navigation or public page code.
@@ -43,8 +45,10 @@ npm run dev
 
 - Site identity and resume data: `data/site.ts`
 - MatthewOS mock data: `data/matthewos.ts`
+- MatthewOS Health seed data: `data/health.ts`
 - Public pages: `app/page.tsx`, `app/about/page.tsx`, `app/resume/page.tsx`, `app/gallery/page.tsx`, `app/contact/page.tsx`
 - Dashboard shell: `components/MatthewOSDashboard.tsx`
+- Health dashboard: `components/HealthDashboard.tsx`
 - D1 schema: `schema.sql`
 - Cloudflare bindings: `wrangler.jsonc`
 - Previous structure snapshot: `docs/previous-website-structure.md`
@@ -94,6 +98,19 @@ Tables included in `schema.sql`:
 - `work_projects`
 - `bookmarks`
 - `gallery_items`
+- `health_profiles`
+- `health_exercises`
+- `health_workout_plans`
+- `health_workout_sessions`
+- `health_recipes`
+- `health_meal_plan_entries`
+- `health_daily_logs`
+- `health_grocery_lists`
+- `health_grocery_items`
+- `health_pantry_items`
+- `health_progress_entries`
+- `health_progress_photos`
+- `health_reminders`
 
 ## Cloudflare R2
 
@@ -112,6 +129,49 @@ In Cloudflare Pages, add R2 bindings:
 
 The current document and gallery endpoints are placeholders. They show where upload, list, download,
 and delete logic should connect to R2 and where metadata should connect to D1.
+
+Health progress photos use private R2 object storage through the dashboard bucket binding. The API
+stores photo metadata in D1 and serves photos from `/api/health/photos/:id`, which should remain
+behind Cloudflare Access with the rest of `/dashboard`.
+
+## MatthewOS Health
+
+The private Health module lives at `/dashboard/health`.
+
+Current functionality:
+
+- Health overview with calories, protein, water, workouts, groceries, weight, and wedding goal cards
+- Today view for workout status, nutrition logging, meals, and reminders
+- Workout plan builder, exercise library, session history, start/complete/skip actions
+- Meal planner, recipe library, and rule-based healthy meal suggestions
+- Grocery list generation from meal plans and shopping-mode checkoffs
+- Pantry tracking with staple and expiration metadata
+- Progress logging with trend averages and private progress photo upload scaffolding
+- Reminder preference storage for future scheduled notifications
+
+Health data is seeded from `data/health.ts` and persisted through `/api/health/*` route handlers
+when the D1 binding is available. The meal suggestion endpoint is intentionally local and rule-based
+for now; an AI provider can be added later without changing the dashboard surface.
+
+Health API routes include:
+
+- `GET /api/health`
+- `POST /api/health/exercises`
+- `POST /api/health/workout-plans`
+- `POST /api/health/workout-sessions`
+- `PATCH /api/health/workout-sessions/:id`
+- `POST /api/health/recipes`
+- `POST /api/health/meal-plan`
+- `POST /api/health/daily-log`
+- `POST /api/health/grocery/generate`
+- `POST /api/health/grocery/items`
+- `PATCH /api/health/grocery/items/:id`
+- `POST /api/health/pantry`
+- `POST /api/health/progress`
+- `POST /api/health/photos`
+- `GET /api/health/photos/:id`
+- `POST /api/health/reminders`
+- `POST /api/health/suggestions`
 
 ## Protect `/dashboard` With Cloudflare Access
 

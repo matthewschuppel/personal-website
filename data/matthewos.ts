@@ -6,6 +6,7 @@ import {
   Camera,
   CheckSquare,
   Database,
+  Dumbbell,
   FileText,
   Heart,
   Home,
@@ -23,6 +24,7 @@ export type DashboardSectionKey =
   | "Notes"
   | "Tasks"
   | "Habits"
+  | "Health"
   | "Calendar"
   | "Documents"
   | "Home"
@@ -134,6 +136,7 @@ export const osNavigation: DashboardNavItem[] = [
   { label: "Notes", icon: NotebookPen },
   { label: "Tasks", icon: CheckSquare },
   { label: "Habits", icon: Repeat2 },
+  { label: "Health", icon: Dumbbell },
   { label: "Calendar", icon: CalendarDays },
   { label: "Documents", icon: FileText },
   { label: "Home", icon: Home },
@@ -466,6 +469,11 @@ export const featureSections: FeatureSection[] = [
     title: "Habits",
     description: "A monthly habit tracker for commitments, check-ins, streaks, and progress.",
     items: ["Habit creation", "Frequency target", "Monthly grid", "Progress percentage", "Streak preview"]
+  },
+  {
+    title: "Health",
+    description: "A private health, fitness, nutrition, and wedding-prep operating center.",
+    items: ["Workout tracking", "Meal planning", "Recipes", "Grocery list", "Progress tracking", "Wedding goals"]
   },
   {
     title: "Calendar",
