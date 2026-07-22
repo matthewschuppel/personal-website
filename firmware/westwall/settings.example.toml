@@ -1,0 +1,4 @@
+CIRCUITPY_WIFI_SSID = "your-network-name"
+CIRCUITPY_WIFI_PASSWORD = "your-network-password"
+WESTWALL_API_URL = "https://matthewschuppel.com"
+WESTWALL_DEVICE_TOKEN = "your-generated-device-token"
