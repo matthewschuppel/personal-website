@@ -7,7 +7,5 @@ export async function canManageGallery() {
 }
 
 export async function canUsePrivateDashboard() {
-  // Placeholder for Cloudflare Access, Clerk, or Auth.js.
-  // The dashboard is intentionally structured as private, but auth is simulated for now.
-  return true;
+  return canManageGallery();
 }
