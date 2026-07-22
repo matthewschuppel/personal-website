@@ -22,7 +22,7 @@ import wifi
 from adafruit_display_text import label
 
 
-FIRMWARE_VERSION = "1.0.0"
+FIRMWARE_VERSION = "1.0.1"
 WIDTH = 128
 HEIGHT = 64
 POLL_SECONDS = 15
@@ -86,7 +86,7 @@ for text_label in line_labels:
 root.append(status)
 
 current_screen = "boot"
-current_payload = None
+current_render_signature = None
 
 
 def fit(text, max_characters=21):
@@ -145,10 +145,18 @@ def request_json(method, path, body=None):
 
 
 def fetch_current():
-    global current_payload
+    global current_render_signature
     payload = request_json("GET", "/api/westwall/current")
-    if payload != current_payload:
-        current_payload = payload
+    # The API's generatedAt value changes on every poll. Compare only values
+    # that affect the display so unchanged content is not needlessly redrawn.
+    render_signature = (
+        payload.get("screen", "message"),
+        payload.get("label", ""),
+        tuple(str(line) for line in payload.get("lines", [])),
+        payload.get("brightness"),
+    )
+    if render_signature != current_render_signature:
+        current_render_signature = render_signature
         show_lines(
             payload.get("lines", ["WestWall Ready"]),
             payload.get("screen", "message"),
