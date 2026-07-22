@@ -189,6 +189,9 @@ CREATE TABLE IF NOT EXISTS westwall_upcoming_flights (
   status TEXT,
   seat TEXT,
   confirmation TEXT,
+  source TEXT NOT NULL DEFAULT 'manual',
+  source_event_id TEXT,
+  synced_at TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (device_id) REFERENCES westwall_devices(id) ON DELETE CASCADE
@@ -315,6 +318,7 @@ CREATE INDEX IF NOT EXISTS idx_gallery_items_album ON gallery_items(album);
 CREATE INDEX IF NOT EXISTS idx_westwall_devices_slug ON westwall_devices(slug);
 CREATE INDEX IF NOT EXISTS idx_westwall_rotation_device ON westwall_rotation_screens(device_id);
 CREATE INDEX IF NOT EXISTS idx_westwall_flights_device ON westwall_upcoming_flights(device_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_westwall_flights_calendar_event ON westwall_upcoming_flights(source_event_id) WHERE source_event_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_westwall_commands_device ON westwall_command_logs(device_id);
 CREATE INDEX IF NOT EXISTS idx_westwall_checkins_device ON westwall_device_checkins(device_id);
 CREATE INDEX IF NOT EXISTS idx_westwall_messages_device ON westwall_custom_messages(device_id);

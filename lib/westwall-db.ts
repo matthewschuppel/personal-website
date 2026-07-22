@@ -22,6 +22,7 @@ import {
   type WestWallWeatherLocation
 } from "@/data/westwall";
 import { createId, getD1Database } from "@/lib/d1";
+import { getAppleCalendarEvents, type CalendarEvent } from "@/lib/apple-calendar";
 
 const DEFAULT_DEVICE_ID = "display-westwall";
 const DEFAULT_DEVICE_SLUG = "westwall";
@@ -61,6 +62,9 @@ type FlightRow = {
   status: string | null;
   seat: string | null;
   confirmation: string | null;
+  source: WestWallUpcomingFlight["source"] | null;
+  source_event_id: string | null;
+  synced_at: string | null;
 };
 
 type LocationRow = {
@@ -194,7 +198,10 @@ function toFlight(row: FlightRow): WestWallUpcomingFlight {
     terminal: row.terminal ?? "",
     status: row.status ?? "Unknown",
     seat: row.seat ?? "",
-    confirmation: row.confirmation ?? ""
+    confirmation: row.confirmation ?? "",
+    source: row.source === "calendar" ? "calendar" : "manual",
+    sourceEventId: row.source_event_id ?? "",
+    syncedAt: row.synced_at ?? ""
   };
 }
 
@@ -354,7 +361,7 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
     const deviceRow = await db.prepare("SELECT id, name, slug, status, last_check_in, active_screen, brightness, wifi_rssi, firmware_version FROM westwall_devices WHERE slug = ?").bind(DEFAULT_DEVICE_SLUG).first<DeviceRow>();
     const settingsRow = await db.prepare("SELECT global_brightness, auto_brightness, day_brightness, night_brightness, sleep_start, sleep_end, color_theme, font_size, scroll_speed, animation_style, show_icons, dot_matrix_preview, units FROM westwall_settings WHERE device_id = ?").bind(DEFAULT_DEVICE_ID).first<SettingsRow>();
     const { results: rotationRows = [] } = await db.prepare("SELECT id, screen_key, label, enabled, duration_seconds, priority, preview FROM westwall_rotation_screens WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<RotationRow>();
-    const { results: flightRows = [] } = await db.prepare("SELECT id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation FROM westwall_upcoming_flights WHERE device_id = ? ORDER BY departure_time ASC").bind(DEFAULT_DEVICE_ID).all<FlightRow>();
+    const { results: flightRows = [] } = await db.prepare("SELECT id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation, source, source_event_id, synced_at FROM westwall_upcoming_flights WHERE device_id = ? AND (departure_time IS NULL OR departure_time = '' OR departure_time >= datetime('now', '-12 hours')) ORDER BY departure_time ASC").bind(DEFAULT_DEVICE_ID).all<FlightRow>();
     const { results: locationRows = [] } = await db.prepare("SELECT id, name, latitude, longitude, radius_miles, altitude_filter, airline_filter, aircraft_type_filter, refresh_interval_seconds, data_source, is_default FROM westwall_saved_locations WHERE device_id = ? ORDER BY is_default DESC, name ASC").bind(DEFAULT_DEVICE_ID).all<LocationRow>();
     const { results: tickerRows = [] } = await db.prepare("SELECT id, symbol, label, enabled, asset_type, show_price, show_change, show_percent_change, show_trend_arrow, refresh_interval_seconds, priority FROM westwall_stock_tickers WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<TickerRow>();
     const { results: weatherRows = [] } = await db.prepare("SELECT id, name, latitude, longitude, is_default FROM westwall_weather_locations WHERE device_id = ? ORDER BY is_default DESC, name ASC").bind(DEFAULT_DEVICE_ID).all<WeatherLocationRow>();
@@ -404,17 +411,87 @@ export async function createWestWallFlight(input: Partial<WestWallUpcomingFlight
     terminal: input.terminal ?? "",
     status: input.status ?? "Planned",
     seat: input.seat ?? "",
-    confirmation: input.confirmation ?? ""
+    confirmation: input.confirmation ?? "",
+    source: input.source ?? "manual",
+    sourceEventId: input.sourceEventId ?? "",
+    syncedAt: input.syncedAt ?? ""
   };
 
   if (!db) return flight;
 
   await db
-    .prepare("INSERT INTO westwall_upcoming_flights (id, device_id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-    .bind(flight.id, DEFAULT_DEVICE_ID, flight.airline, flight.flightNumber, flight.departureAirport, flight.arrivalAirport, flight.departureTime, flight.arrivalTime, flight.gate, flight.terminal, flight.status, flight.seat, flight.confirmation)
+    .prepare("INSERT INTO westwall_upcoming_flights (id, device_id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation, source, source_event_id, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .bind(flight.id, DEFAULT_DEVICE_ID, flight.airline, flight.flightNumber, flight.departureAirport, flight.arrivalAirport, flight.departureTime, flight.arrivalTime, flight.gate, flight.terminal, flight.status, flight.seat, flight.confirmation, flight.source, flight.sourceEventId || null, flight.syncedAt || null)
     .run();
 
   return flight;
+}
+
+export async function upsertCalendarWestWallFlight(flight: WestWallUpcomingFlight) {
+  const db = getDbOrNull();
+  if (!db) return flight;
+
+  await db.prepare(
+    `INSERT INTO westwall_upcoming_flights
+      (id, device_id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation, source, source_event_id, synced_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'calendar', ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+      airline = excluded.airline,
+      flight_number = excluded.flight_number,
+      departure_airport = excluded.departure_airport,
+      arrival_airport = excluded.arrival_airport,
+      departure_time = excluded.departure_time,
+      arrival_time = excluded.arrival_time,
+      gate = excluded.gate,
+      terminal = excluded.terminal,
+      status = excluded.status,
+      seat = excluded.seat,
+      confirmation = excluded.confirmation,
+      source = 'calendar',
+      source_event_id = excluded.source_event_id,
+      synced_at = excluded.synced_at,
+      updated_at = CURRENT_TIMESTAMP`
+  ).bind(
+    flight.id,
+    DEFAULT_DEVICE_ID,
+    flight.airline,
+    flight.flightNumber,
+    flight.departureAirport,
+    flight.arrivalAirport,
+    flight.departureTime,
+    flight.arrivalTime,
+    flight.gate,
+    flight.terminal,
+    flight.status,
+    flight.seat,
+    flight.confirmation,
+    flight.sourceEventId,
+    flight.syncedAt
+  ).run();
+
+  return flight;
+}
+
+export async function pruneCalendarWestWallFlights(activeEventIds: string[]) {
+  const db = getDbOrNull();
+  if (!db) return;
+
+  const { results = [] } = await db.prepare(
+    "SELECT id, source_event_id FROM westwall_upcoming_flights WHERE device_id = ? AND source = 'calendar'"
+  ).bind(DEFAULT_DEVICE_ID).all<{ id: string; source_event_id: string | null }>();
+
+  const active = new Set(activeEventIds);
+  for (const row of results) {
+    if (!row.source_event_id || !active.has(row.source_event_id)) {
+      await db.prepare("DELETE FROM westwall_upcoming_flights WHERE id = ? AND device_id = ?").bind(row.id, DEFAULT_DEVICE_ID).run();
+    }
+  }
+}
+
+export async function deleteWestWallFlight(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_upcoming_flights WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
 }
 
 export async function createWestWallLocation(input: Partial<WestWallSavedLocation>) {
@@ -443,6 +520,12 @@ export async function createWestWallLocation(input: Partial<WestWallSavedLocatio
   return location;
 }
 
+export async function deleteWestWallLocation(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_saved_locations WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
+}
+
 export async function createWestWallTicker(input: Partial<WestWallStockTicker>) {
   const db = getDbOrNull();
   const ticker: WestWallStockTicker = {
@@ -469,6 +552,12 @@ export async function createWestWallTicker(input: Partial<WestWallStockTicker>) 
   return ticker;
 }
 
+export async function deleteWestWallTicker(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_stock_tickers WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
+}
+
 export async function createWestWallWeatherLocation(input: Partial<WestWallWeatherLocation>) {
   const db = getDbOrNull();
   const location: WestWallWeatherLocation = {
@@ -487,6 +576,12 @@ export async function createWestWallWeatherLocation(input: Partial<WestWallWeath
     .run();
 
   return location;
+}
+
+export async function deleteWestWallWeatherLocation(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_weather_locations WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
 }
 
 export async function queueWestWallCommand(command: string, payload: unknown = {}) {
@@ -552,6 +647,26 @@ export async function createWestWallMessage(input: Partial<WestWallCustomMessage
     .run();
 
   return message;
+}
+
+export async function updateWestWallMessage(id: string, input: Partial<WestWallCustomMessage>) {
+  const db = getDbOrNull();
+  if (!db) return null;
+
+  const current = await db.prepare("SELECT id, title, message, enabled, starts_at, ends_at, priority FROM westwall_custom_messages WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).first<MessageRow>();
+  if (!current) return null;
+  const message = { ...toMessage(current), ...input, id };
+
+  await db.prepare(
+    "UPDATE westwall_custom_messages SET title = ?, message = ?, enabled = ?, starts_at = ?, ends_at = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND device_id = ?"
+  ).bind(message.title, message.message, bool(message.enabled), message.startsAt || null, message.endsAt || null, message.priority, id, DEFAULT_DEVICE_ID).run();
+  return message;
+}
+
+export async function deleteWestWallMessage(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_custom_messages WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
 }
 
 export async function recordWestWallCheckin(input: Partial<WestWallDeviceCheckin>) {
@@ -659,16 +774,64 @@ export async function buildWestWallCurrentPayload() {
     .filter((message) => message.enabled)
     .filter((message) => (!message.startsAt || Date.parse(message.startsAt) <= now) && (!message.endsAt || Date.parse(message.endsAt) >= now))
     .sort((a, b) => a.priority - b.priority)[0];
-  const active = scheduledMessage ? data.rotation.find((screen) => screen.key === "custom-message") : data.rotation.find((screen) => screen.enabled) ?? data.rotation[0];
+  let calendarEvents: CalendarEvent[] = [];
+  try {
+    calendarEvents = (await getAppleCalendarEvents()).events;
+  } catch {
+    // Keep the device payload available even if the private calendar feed fails.
+  }
+
+  const nextFlight = data.flights
+    .filter((flight) => !flight.departureTime || Date.parse(flight.departureTime) >= now - 12 * 60 * 60 * 1000)
+    .sort((a, b) => Date.parse(a.departureTime || "9999-12-31") - Date.parse(b.departureTime || "9999-12-31"))[0];
+  const defaultWeather = data.weatherLocations.find((location) => location.isDefault) ?? data.weatherLocations[0];
+  const enabledStocks = data.stocks.filter((stock) => stock.enabled).sort((a, b) => a.priority - b.priority);
+  const timeFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric", minute: "2-digit" });
+  const dateFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+  function screenLines(screen: WestWallRotationScreen) {
+    switch (screen.key) {
+      case "upcoming-flights":
+        return nextFlight ? [
+          `${nextFlight.flightNumber} ${nextFlight.status}`,
+          `${nextFlight.departureAirport} > ${nextFlight.arrivalAirport}`,
+          `${nextFlight.departureTime ? dateFormatter.format(new Date(nextFlight.departureTime)) : "Time TBD"}${nextFlight.gate ? ` GATE ${nextFlight.gate}` : ""}`
+        ] : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"];
+      case "stocks":
+        return enabledStocks.length ? ["MARKET WATCH", enabledStocks.slice(0, 3).map((stock) => stock.symbol).join("  "), enabledStocks.slice(3, 6).map((stock) => stock.symbol).join("  ")] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"];
+      case "weather":
+        return [defaultWeather?.name ?? "Dallas, TX", "WEATHER DISPLAY", "READY FOR LIVE DATA"];
+      case "clock":
+        return [timeFormatter.format(new Date()), "MATTHEWOS", data.device.status.toUpperCase()];
+      case "calendar-preview": {
+        const event = calendarEvents[0];
+        return event ? ["NEXT EVENT", event.title, dateFormatter.format(new Date(event.startsAt))] : ["CALENDAR CLEAR", "NO UPCOMING EVENTS", timeFormatter.format(new Date())];
+      }
+      case "custom-message":
+        return scheduledMessage ? [scheduledMessage.title, scheduledMessage.message] : [screen.label, screen.preview || "NO ACTIVE MESSAGE"];
+      default:
+        return [screen.label, screen.preview || "WESTWALL READY"];
+    }
+  }
+
+  const enabledScreens = data.rotation.filter((screen) => screen.enabled).sort((a, b) => a.priority - b.priority);
+  const playlist = (scheduledMessage
+    ? [data.rotation.find((screen) => screen.key === "custom-message") ?? { id: "scheduled", key: "custom-message" as const, label: scheduledMessage.title, enabled: true, durationSeconds: 30, priority: 0, preview: scheduledMessage.message }]
+    : enabledScreens
+  ).map((screen) => ({
+    screen: screen.key,
+    label: scheduledMessage?.title ?? screen.label,
+    lines: screenLines(screen),
+    duration: Math.max(5, screen.durationSeconds)
+  }));
+
+  const active = playlist[0] ?? { screen: "clock", label: "Clock", lines: [timeFormatter.format(new Date())], duration: 30 };
 
   return {
-    screen: scheduledMessage ? "custom-message" : active?.key ?? "clock",
-    label: scheduledMessage?.title ?? active?.label ?? "Clock",
-    lines: [
-      scheduledMessage?.message ?? active?.preview ?? "WestWall Ready",
-      data.stocks.filter((stock) => stock.enabled).slice(0, 3).map((stock) => stock.symbol).join("  "),
-      data.weatherLocations.find((location) => location.isDefault)?.name ?? "Dallas, TX"
-    ].filter(Boolean),
+    screen: active.screen,
+    label: active.label,
+    lines: active.lines.filter(Boolean),
+    playlist,
     brightness: data.appearance.globalBrightness,
     generatedAt: new Date().toISOString()
   };

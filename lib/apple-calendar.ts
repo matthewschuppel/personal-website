@@ -6,6 +6,7 @@ export type CalendarEvent = {
   startsAt: string;
   endsAt: string | null;
   location: string;
+  description: string;
 };
 
 type RawEvent = {
@@ -14,6 +15,7 @@ type RawEvent = {
   dtstart?: string;
   dtend?: string;
   location?: string;
+  description?: string;
 };
 
 function getCalendarUrl() {
@@ -136,6 +138,10 @@ function parseEvents(ics: string) {
     if (fieldName === "LOCATION") {
       currentEvent.location = value;
     }
+
+    if (fieldName === "DESCRIPTION") {
+      currentEvent.description = value;
+    }
   }
 
   const now = new Date();
@@ -155,7 +161,8 @@ function parseEvents(ics: string) {
         title: event.summary || "Untitled event",
         startsAt,
         endsAt,
-        location: event.location || ""
+        location: event.location || "",
+        description: event.description || ""
       };
     })
     .filter((event): event is NonNullable<typeof event> => {
@@ -166,13 +173,14 @@ function parseEvents(ics: string) {
       return event.startsAt >= now && event.startsAt <= ninetyDaysFromNow;
     })
     .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())
-    .slice(0, 8)
+    .slice(0, 50)
     .map<CalendarEvent>((event) => ({
       id: event.id,
       title: event.title,
       startsAt: event.startsAt.toISOString(),
       endsAt: event.endsAt?.toISOString() ?? null,
-      location: event.location
+      location: event.location,
+      description: event.description
     }));
 }
 

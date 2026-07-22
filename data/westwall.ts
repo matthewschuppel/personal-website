@@ -44,6 +44,9 @@ export type WestWallUpcomingFlight = {
   status: string;
   seat: string;
   confirmation: string;
+  source: "manual" | "calendar";
+  sourceEventId: string;
+  syncedAt: string;
 };
 
 export type WestWallSavedLocation = {
@@ -176,7 +179,10 @@ export const mockWestWallFlights: WestWallUpcomingFlight[] = [
     terminal: "A",
     status: "On time",
     seat: "12A",
-    confirmation: "Private"
+    confirmation: "Private",
+    source: "manual",
+    sourceEventId: "",
+    syncedAt: ""
   }
 ];
 
