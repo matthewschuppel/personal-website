@@ -22,12 +22,12 @@ import wifi
 from adafruit_display_text import label
 
 
-FIRMWARE_VERSION = "1.0.1"
+FIRMWARE_VERSION = "1.0.2"
 WIDTH = 128
 HEIGHT = 64
-POLL_SECONDS = 15
-CHECKIN_SECONDS = 45
-COMMAND_SECONDS = 10
+POLL_SECONDS = 30
+CHECKIN_SECONDS = 60
+COMMAND_SECONDS = 30
 
 API_BASE = os.getenv("WESTWALL_API_URL", "https://matthewschuppel.com").rstrip("/")
 DEVICE_TOKEN = os.getenv("WESTWALL_DEVICE_TOKEN", "")
@@ -43,7 +43,10 @@ def setup_display():
     matrix = rgbmatrix.RGBMatrix(
         width=WIDTH,
         height=HEIGHT,
-        bit_depth=2,
+        # One-bit color gives the ESP32-S3 substantially more scan-timing
+        # headroom on this large panel and prevents transient row glitches
+        # while its Wi-Fi radio is active.
+        bit_depth=1,
         rgb_pins=[
             board.MTX_B1,
             board.MTX_G1,
@@ -73,7 +76,7 @@ display = setup_display()
 root = displayio.Group()
 display.root_group = root
 
-header = label.Label(terminalio.FONT, text="WESTWALL", color=0xFF7800, x=2, y=5)
+header = label.Label(terminalio.FONT, text="WESTWALL", color=0xFFFF00, x=2, y=5)
 line_labels = [
     label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=2, y=20),
     label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=2, y=34),
