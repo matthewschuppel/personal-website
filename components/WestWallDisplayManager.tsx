@@ -15,6 +15,7 @@ import {
   Moon,
   Plus,
   RefreshCw,
+  Save,
   Settings2,
   Signal,
   Sun,
@@ -85,6 +86,21 @@ function formatDate(value: string) {
   return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
 }
 
+function toDateTimeLocal(value: string) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.slice(0, 16);
+  const offset = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function isMessageActive(message: WestWallDashboardData["messages"][number]) {
+  const now = Date.now();
+  return message.enabled
+    && (!message.startsAt || Date.parse(message.startsAt) <= now)
+    && (!message.endsAt || Date.parse(message.endsAt) >= now);
+}
+
 function humanize(value: string) {
   return value.replaceAll("-", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -119,7 +135,7 @@ export function WestWallDisplayManager() {
   }, [loadWestWall]);
 
   const orderedScreens = useMemo(() => [...data.rotation].sort((a, b) => a.priority - b.priority), [data.rotation]);
-  const activeMessage = useMemo(() => data.messages.filter((message) => message.enabled).sort((a, b) => a.priority - b.priority)[0], [data.messages]);
+  const activeMessage = useMemo(() => data.messages.filter(isMessageActive).sort((a, b) => a.priority - b.priority)[0], [data.messages]);
   const previewScreen = orderedScreens.find((screen) => screen.enabled) ?? orderedScreens[0];
   const previewLines = activeMessage
     ? [activeMessage.message, "Scheduled message", "Priority " + activeMessage.priority]
@@ -190,6 +206,23 @@ export function WestWallDisplayManager() {
     const values = new FormData(form);
     const saved = await request("/api/westwall/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...Object.fromEntries(values), enabled: values.get("enabled") === "on", priority: Number(values.get("priority") || 1) }) }, "Message scheduled.");
     if (saved) form.reset();
+  }
+
+  async function saveMessage(event: FormEvent<HTMLFormElement>, id: string) {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    await request(`/api/westwall/messages/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: String(values.get("title") || "Custom message"),
+        message: String(values.get("message") || ""),
+        startsAt: String(values.get("startsAt") || ""),
+        endsAt: String(values.get("endsAt") || ""),
+        enabled: values.get("enabled") === "on",
+        priority: Number(values.get("priority") || 1)
+      })
+    }, "Message changes saved.");
   }
 
   async function remove(kind: "flights" | "messages" | "stocks" | "weather-locations" | "locations", id: string, label: string) {
@@ -281,7 +314,7 @@ export function WestWallDisplayManager() {
         {activeTab === "Screens" ? <Card title="Screen playlist" description="WestWall rotates through enabled screens in this order. Changes are sent to the sign automatically.">
           <div className="space-y-3">{orderedScreens.map((screen, index) => <div key={screen.id} className="grid gap-3 rounded-2xl border border-ink/10 bg-mist/40 p-4 lg:grid-cols-[1fr_130px_110px] lg:items-center">
             <label className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={screen.enabled} onChange={(event) => void saveRotation(orderedScreens.map((item) => item.id === screen.id ? { ...item, enabled: event.target.checked } : item))} /><span><span className="block font-semibold">{screen.label}</span><span className="mt-1 block text-sm text-ink/50">{screen.preview}</span></span></label>
-            <label className="text-xs font-semibold text-ink/45">SECONDS<input type="number" min="5" max="300" value={screen.durationSeconds} onChange={(event) => setData((current) => ({ ...current, rotation: current.rotation.map((item) => item.id === screen.id ? { ...item, durationSeconds: Number(event.target.value) } : item) }))} onBlur={() => void saveRotation(data.rotation)} className={`${fieldClass} mt-1 w-full`} /></label>
+            <label className="text-xs font-semibold text-ink/45">SECONDS<input type="number" min="5" max="300" value={screen.durationSeconds} onChange={(event) => setData((current) => ({ ...current, rotation: current.rotation.map((item) => item.id === screen.id ? { ...item, durationSeconds: Number(event.target.value) } : item) }))} onBlur={(event) => void saveRotation(orderedScreens.map((item) => item.id === screen.id ? { ...item, durationSeconds: Number(event.currentTarget.value) } : item))} className={`${fieldClass} mt-1 w-full`} /></label>
             <div className="flex justify-end gap-2"><button disabled={index === 0 || busy} onClick={() => moveScreen(screen.id, -1)} className={secondaryButton} aria-label={`Move ${screen.label} up`}><ChevronUp size={16} /></button><button disabled={index === orderedScreens.length - 1 || busy} onClick={() => moveScreen(screen.id, 1)} className={secondaryButton} aria-label={`Move ${screen.label} down`}><ChevronDown size={16} /></button></div>
           </div>)}</div>
         </Card> : null}
@@ -303,11 +336,21 @@ export function WestWallDisplayManager() {
         </section> : null}
 
         {activeTab === "Messages" ? <section className="mt-5 grid gap-4 lg:grid-cols-[0.85fr_1.15fr]">
-          <Card title="Schedule a message" description="An active message temporarily takes priority over the normal screen playlist.">
+          <Card title="Schedule a message" description="An active message temporarily takes priority over the normal screen playlist. Leave both times blank only when you want it to stay on until you pause it.">
             <form onSubmit={addMessage} className="grid gap-3"><input required name="title" placeholder="Message title" className={fieldClass} /><textarea required name="message" placeholder="What should WestWall say?" className={`${fieldClass} min-h-28 py-3`} /><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">STARTS<input name="startsAt" type="datetime-local" className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">ENDS<input name="endsAt" type="datetime-local" className={`${fieldClass} mt-1 w-full`} /></label></div><div className="flex items-center justify-between"><label className="flex items-center gap-2 text-sm"><input name="enabled" type="checkbox" defaultChecked />Active</label><input name="priority" type="number" min="1" defaultValue="1" className={`${fieldClass} w-24`} /></div><button disabled={busy} className={primaryButton}><Plus size={16} />Schedule message</button></form>
           </Card>
-          <Card title="Message queue" description="Enable, pause, or remove scheduled messages.">
-            <div className="space-y-3">{data.messages.map((message) => <article key={message.id} className="rounded-2xl border border-ink/10 p-4"><div className="flex items-start justify-between gap-4"><div><p className="font-semibold">{message.title}</p><p className="mt-1 text-sm text-ink/60">{message.message}</p><p className="mt-2 text-xs text-ink/40">{message.startsAt ? formatDate(message.startsAt) : "Starts now"} · {message.endsAt ? `Ends ${formatDate(message.endsAt)}` : "No end date"}</p></div><button onClick={() => void remove("messages", message.id, message.title)} className="rounded-lg p-2 text-ink/35 hover:bg-clay/10 hover:text-clay"><Trash2 size={16} /></button></div><button disabled={busy} onClick={() => void request(`/api/westwall/messages/${encodeURIComponent(message.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !message.enabled }) }, message.enabled ? "Message paused." : "Message activated.")} className={`${secondaryButton} mt-3`}>{message.enabled ? "Pause" : "Activate"}</button></article>)}{data.messages.length === 0 ? <p className="text-sm text-ink/50">No scheduled messages.</p> : null}</div>
+          <Card title="Message queue" description="Edit every part of a message, then save it. An Always on badge means it will replace the full playlist until paused.">
+            <div className="space-y-3">{data.messages.map((message) => <form key={message.id} onSubmit={(event) => void saveMessage(event, message.id)} className="grid gap-3 rounded-2xl border border-ink/10 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide ${isMessageActive(message) ? "bg-moss/10 text-moss" : "bg-ink/5 text-ink/45"}`}>{isMessageActive(message) ? (!message.startsAt && !message.endsAt ? "Always on" : "Showing now") : message.enabled ? "Scheduled" : "Paused"}</span>
+                <button type="button" onClick={() => void remove("messages", message.id, message.title)} className="rounded-lg p-2 text-ink/35 hover:bg-clay/10 hover:text-clay" aria-label={`Delete ${message.title}`}><Trash2 size={16} /></button>
+              </div>
+              <input required name="title" aria-label="Message title" defaultValue={message.title} className={fieldClass} />
+              <textarea required name="message" aria-label="Message text" defaultValue={message.message} className={`${fieldClass} min-h-24 py-3`} />
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">STARTS<input name="startsAt" type="datetime-local" defaultValue={toDateTimeLocal(message.startsAt)} className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">ENDS<input name="endsAt" type="datetime-local" defaultValue={toDateTimeLocal(message.endsAt)} className={`${fieldClass} mt-1 w-full`} /></label></div>
+              <div className="flex flex-wrap items-end justify-between gap-3"><label className="flex min-h-11 items-center gap-2 text-sm"><input name="enabled" type="checkbox" defaultChecked={message.enabled} />Active</label><label className="text-xs font-semibold text-ink/45">PRIORITY<input name="priority" type="number" min="1" defaultValue={message.priority} className={`${fieldClass} mt-1 w-24`} /></label></div>
+              <div className="flex flex-wrap gap-2"><button disabled={busy} type="submit" className={primaryButton}><Save size={16} />Save changes</button><button disabled={busy} type="button" onClick={() => void request(`/api/westwall/messages/${encodeURIComponent(message.id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ enabled: !message.enabled }) }, message.enabled ? "Message paused." : "Message activated.")} className={secondaryButton}>{message.enabled ? "Pause now" : "Activate now"}</button></div>
+            </form>)}{data.messages.length === 0 ? <div className="rounded-2xl border border-dashed border-ink/15 p-6 text-center"><MessageSquareText size={24} className="mx-auto text-ink/25" /><p className="mt-3 font-semibold">No messages are overriding your screens.</p><p className="mt-1 text-sm text-ink/50">The normal playlist is in control.</p></div> : null}</div>
           </Card>
         </section> : null}
 

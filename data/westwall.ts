@@ -241,7 +241,7 @@ export const mockWestWallMessages: WestWallCustomMessage[] = [
     id: "message-001",
     title: "Welcome Home",
     message: "Welcome home, Matthew",
-    enabled: true,
+    enabled: false,
     startsAt: "",
     endsAt: "",
     priority: 1

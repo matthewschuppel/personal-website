@@ -23,6 +23,7 @@ import {
 } from "@/data/westwall";
 import { createId, getD1Database } from "@/lib/d1";
 import { getAppleCalendarEvents, type CalendarEvent } from "@/lib/apple-calendar";
+import { getWeatherFromProvider, type WeatherSnapshot } from "@/lib/westwall-providers";
 
 const DEFAULT_DEVICE_ID = "display-westwall";
 const DEFAULT_DEVICE_SLUG = "westwall";
@@ -379,7 +380,7 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
       appearance: settingsRow ? toAppearance(settingsRow) : mockWestWallAppearance,
       commands: commandRows.length ? commandRows.map(toCommand) : mockWestWallCommands,
       checkins: checkinRows.length ? checkinRows.map(toCheckin) : mockWestWallData.checkins,
-      messages: messageRows.length ? messageRows.map(toMessage) : mockWestWallMessages
+      messages: messageRows.map(toMessage)
     };
   } catch {
     return mockWestWallData;
@@ -785,32 +786,56 @@ export async function buildWestWallCurrentPayload() {
     .filter((flight) => !flight.departureTime || Date.parse(flight.departureTime) >= now - 12 * 60 * 60 * 1000)
     .sort((a, b) => Date.parse(a.departureTime || "9999-12-31") - Date.parse(b.departureTime || "9999-12-31"))[0];
   const defaultWeather = data.weatherLocations.find((location) => location.isDefault) ?? data.weatherLocations[0];
+  let weather: WeatherSnapshot | null = null;
+  if (defaultWeather) {
+    try {
+      weather = await getWeatherFromProvider(defaultWeather, data.appearance.units);
+    } catch {
+      // Weather is optional; keep the rest of the playlist available if its provider is down.
+    }
+  }
   const enabledStocks = data.stocks.filter((stock) => stock.enabled).sort((a, b) => a.priority - b.priority);
   const timeFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric", minute: "2-digit" });
   const dateFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-  function screenLines(screen: WestWallRotationScreen) {
+  function airlineSymbol(flight: WestWallUpcomingFlight | undefined) {
+    if (!flight) return "";
+    const fromNumber = flight.flightNumber.toUpperCase().match(/^([A-Z0-9]{2,3})\s*\d/)?.[1];
+    if (fromNumber) return fromNumber;
+    const knownAirlines: Record<string, string> = {
+      american: "AA", southwest: "WN", united: "UA", delta: "DL", alaska: "AS",
+      jetblue: "B6", spirit: "NK", frontier: "F9", aircanada: "AC", british: "BA"
+    };
+    const normalized = flight.airline.toLowerCase().replace(/[^a-z]/g, "");
+    return Object.entries(knownAirlines).find(([name]) => normalized.includes(name))?.[1] ?? flight.airline.slice(0, 2).toUpperCase();
+  }
+
+  function screenContent(screen: WestWallRotationScreen) {
     switch (screen.key) {
       case "upcoming-flights":
-        return nextFlight ? [
+        return { icon: "plane", symbol: airlineSymbol(nextFlight), lines: nextFlight ? [
           `${nextFlight.flightNumber} ${nextFlight.status}`,
           `${nextFlight.departureAirport} > ${nextFlight.arrivalAirport}`,
           `${nextFlight.departureTime ? dateFormatter.format(new Date(nextFlight.departureTime)) : "Time TBD"}${nextFlight.gate ? ` GATE ${nextFlight.gate}` : ""}`
-        ] : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"];
+        ] : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"] };
+      case "nearby-aircraft":
+        return { icon: "aircraft", symbol: "", lines: [screen.label, screen.preview || "SCANNING THE SKY", "LOCATION READY"] };
       case "stocks":
-        return enabledStocks.length ? ["MARKET WATCH", enabledStocks.slice(0, 3).map((stock) => stock.symbol).join("  "), enabledStocks.slice(3, 6).map((stock) => stock.symbol).join("  ")] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"];
+        return { icon: "chart", symbol: enabledStocks[0]?.symbol?.slice(0, 3) ?? "", lines: enabledStocks.length ? ["MARKET WATCH", enabledStocks.slice(0, 3).map((stock) => stock.symbol).join("  "), enabledStocks.slice(3, 6).map((stock) => stock.symbol).join("  ")] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"] };
       case "weather":
-        return [defaultWeather?.name ?? "Dallas, TX", "WEATHER DISPLAY", "READY FOR LIVE DATA"];
+        return { icon: weather?.icon ?? "cloud", symbol: weather ? String(weather.temperature) : "", lines: weather ? [weather.location, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.conditions}`, `H${weather.high} L${weather.low} R${weather.rainChance}%`] : [defaultWeather?.name ?? "Dallas, TX", "WEATHER UNAVAILABLE", "TRYING AGAIN SOON"] };
       case "clock":
-        return [timeFormatter.format(new Date()), "MATTHEWOS", data.device.status.toUpperCase()];
+        return { icon: "clock", symbol: "", lines: [timeFormatter.format(new Date()), "MATTHEWOS", data.device.status.toUpperCase()] };
       case "calendar-preview": {
         const event = calendarEvents[0];
-        return event ? ["NEXT EVENT", event.title, dateFormatter.format(new Date(event.startsAt))] : ["CALENDAR CLEAR", "NO UPCOMING EVENTS", timeFormatter.format(new Date())];
+        return { icon: "calendar", symbol: "", lines: event ? ["NEXT EVENT", event.title, dateFormatter.format(new Date(event.startsAt))] : ["CALENDAR CLEAR", "NO UPCOMING EVENTS", timeFormatter.format(new Date())] };
       }
       case "custom-message":
-        return scheduledMessage ? [scheduledMessage.title, scheduledMessage.message] : [screen.label, screen.preview || "NO ACTIVE MESSAGE"];
+        return { icon: "message", symbol: "", lines: scheduledMessage ? [scheduledMessage.message, "MESSAGE FROM", "MATTHEWOS"] : [screen.label, screen.preview || "NO ACTIVE MESSAGE"] };
+      case "home-status":
+        return { icon: "home", symbol: "", lines: [screen.label, screen.preview || "HOME SYSTEMS NOMINAL", timeFormatter.format(new Date())] };
       default:
-        return [screen.label, screen.preview || "WESTWALL READY"];
+        return { icon: "message", symbol: "", lines: [screen.label, screen.preview || "WESTWALL READY"] };
     }
   }
 
@@ -818,19 +843,26 @@ export async function buildWestWallCurrentPayload() {
   const playlist = (scheduledMessage
     ? [data.rotation.find((screen) => screen.key === "custom-message") ?? { id: "scheduled", key: "custom-message" as const, label: scheduledMessage.title, enabled: true, durationSeconds: 30, priority: 0, preview: scheduledMessage.message }]
     : enabledScreens
-  ).map((screen) => ({
-    screen: screen.key,
-    label: scheduledMessage?.title ?? screen.label,
-    lines: screenLines(screen),
-    duration: Math.max(5, screen.durationSeconds)
-  }));
+  ).map((screen) => {
+    const content = screenContent(screen);
+    return {
+      screen: screen.key,
+      label: scheduledMessage?.title ?? screen.label,
+      lines: content.lines,
+      icon: data.appearance.showIcons ? content.icon : "none",
+      symbol: data.appearance.showIcons ? content.symbol : "",
+      duration: Math.max(5, screen.durationSeconds)
+    };
+  });
 
-  const active = playlist[0] ?? { screen: "clock", label: "Clock", lines: [timeFormatter.format(new Date())], duration: 30 };
+  const active = playlist[0] ?? { screen: "clock", label: "Clock", lines: [timeFormatter.format(new Date())], icon: "clock", symbol: "", duration: 30 };
 
   return {
     screen: active.screen,
     label: active.label,
     lines: active.lines.filter(Boolean),
+    icon: active.icon,
+    symbol: active.symbol,
     playlist,
     brightness: data.appearance.globalBrightness,
     generatedAt: new Date().toISOString()

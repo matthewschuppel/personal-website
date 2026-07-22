@@ -22,7 +22,7 @@ import wifi
 from adafruit_display_text import label
 
 
-FIRMWARE_VERSION = "1.1.0"
+FIRMWARE_VERSION = "1.2.0"
 WIDTH = 128
 HEIGHT = 64
 POLL_SECONDS = 30
@@ -78,13 +78,22 @@ blank_root = displayio.Group()
 display.root_group = root
 
 header = label.Label(terminalio.FONT, text="WESTWALL", color=0xFFFF00, x=2, y=5)
+icon_bitmap = displayio.Bitmap(16, 16, 2)
+icon_palette = displayio.Palette(2)
+icon_palette[0] = 0x000000
+icon_palette[1] = 0xFFFF00
+icon_palette.make_transparent(0)
+icon_tile = displayio.TileGrid(icon_bitmap, pixel_shader=icon_palette, x=2, y=14)
+icon_badge = label.Label(terminalio.FONT, text="", color=0x00FFFF, x=2, y=46)
 line_labels = [
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=2, y=20),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=2, y=34),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=2, y=48),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=20),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=34),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=48),
 ]
 status = label.Label(terminalio.FONT, text="BOOTING", color=0x00FF40, x=2, y=60)
 root.append(header)
+root.append(icon_tile)
+root.append(icon_badge)
 for text_label in line_labels:
     root.append(text_label)
 root.append(status)
@@ -96,6 +105,82 @@ playlist_index = 0
 playlist_started = time.monotonic()
 sleeping = False
 
+ICON_PATTERNS = {
+    "plane": (
+        "...#....", "..##....", "..##....", "########",
+        "..##....", "...#....", "...#....", "........",
+    ),
+    "aircraft": (
+        "...##...", "...##...", "#..##..#", "########",
+        "...##...", "..####..", "...##...", "...##...",
+    ),
+    "sun": (
+        "#..##..#", ".#.##.#.", "..####..", "########",
+        "########", "..####..", ".#.##.#.", "#..##..#",
+    ),
+    "partly-cloudy": (
+        ".....###", "....####", ".###.###", "######..",
+        "########", "########", ".######.", "........",
+    ),
+    "cloud": (
+        "........", "...###..", ".######.", "########",
+        "########", ".######.", "........", "........",
+    ),
+    "rain": (
+        "...###..", ".######.", "########", ".######.",
+        "........", ".#.#.#..", "#.#.#...", ".#.#.#..",
+    ),
+    "snow": (
+        "...##...", "#..##..#", ".######.", "..####..",
+        "..####..", ".######.", "#..##..#", "...##...",
+    ),
+    "storm": (
+        "...###..", ".######.", "########", ".######.",
+        "...##...", "..##....", "...##...", "..##....",
+    ),
+    "fog": (
+        "........", ".######.", "........", "########",
+        "........", ".######.", "........", "########",
+    ),
+    "chart": (
+        ".......#", ".....###", ".....#.#", "...###.#",
+        "...#...#", ".###...#", ".#.....#", "########",
+    ),
+    "clock": (
+        "..####..", ".#....#.", "#..#...#", "#..#...#",
+        "#..###.#", "#......#", ".#....#.", "..####..",
+    ),
+    "calendar": (
+        ".######.", ".#.#.#..", "########", "#......#",
+        "#.##.#.#", "#......#", "#.##.#.#", "########",
+    ),
+    "message": (
+        ".######.", "########", "#......#", "#......#",
+        "#......#", "########", ".###....", "..##....",
+    ),
+    "home": (
+        "...##...", "..####..", ".######.", "########",
+        ".#....#.", ".#.##.#.", ".#.##.#.", ".######.",
+    ),
+}
+
+ICON_COLORS = {
+    "plane": 0xFF0000,
+    "aircraft": 0x00FFFF,
+    "sun": 0xFFFF00,
+    "partly-cloudy": 0x00FFFF,
+    "cloud": 0xFFFFFF,
+    "rain": 0x0000FF,
+    "snow": 0x00FFFF,
+    "storm": 0xFF0000,
+    "fog": 0xFFFFFF,
+    "chart": 0x00FF00,
+    "clock": 0xFFFF00,
+    "calendar": 0x00FFFF,
+    "message": 0xFF00FF,
+    "home": 0x00FF00,
+}
+
 
 def fit(text, max_characters=21):
     value = str(text or "").strip()
@@ -104,12 +189,30 @@ def fit(text, max_characters=21):
     return value[: max_characters - 1] + "~"
 
 
-def show_lines(lines, screen="message", heading=None):
+def set_icon(icon_name, symbol=""):
+    pattern = ICON_PATTERNS.get(icon_name)
+    for y in range(16):
+        for x in range(16):
+            icon_bitmap[x, y] = 0
+    if pattern:
+        icon_palette[1] = ICON_COLORS.get(icon_name, 0xFFFF00)
+        for source_y, row in enumerate(pattern):
+            for source_x, pixel in enumerate(row):
+                if pixel == "#":
+                    icon_bitmap[source_x * 2, source_y * 2] = 1
+                    icon_bitmap[source_x * 2 + 1, source_y * 2] = 1
+                    icon_bitmap[source_x * 2, source_y * 2 + 1] = 1
+                    icon_bitmap[source_x * 2 + 1, source_y * 2 + 1] = 1
+    icon_badge.text = fit(symbol, 3)
+
+
+def show_lines(lines, screen="message", heading=None, icon="message", symbol=""):
     global current_screen
     current_screen = screen
     header.text = fit((heading or screen).replace("-", " ").upper(), 20)
+    set_icon(icon, symbol)
     for index, text_label in enumerate(line_labels):
-        text_label.text = fit(lines[index] if index < len(lines) else "")
+        text_label.text = fit(lines[index] if index < len(lines) else "", 17)
     status.text = "ONLINE"
 
 
@@ -119,7 +222,7 @@ def show_playlist_item(index):
         return
     playlist_index = index % len(playlist)
     item = playlist[playlist_index]
-    show_lines(item.get("lines", []), item.get("screen", "message"), item.get("label"))
+    show_lines(item.get("lines", []), item.get("screen", "message"), item.get("label"), item.get("icon", "message"), item.get("symbol", ""))
     playlist_started = time.monotonic()
 
 
@@ -179,12 +282,16 @@ def fetch_current():
         payload.get("screen", "message"),
         payload.get("label", ""),
         tuple(str(line) for line in payload.get("lines", [])),
+        payload.get("icon", ""),
+        payload.get("symbol", ""),
         payload.get("brightness"),
         tuple(
             (
                 item.get("screen", ""),
                 item.get("label", ""),
                 tuple(str(line) for line in item.get("lines", [])),
+                item.get("icon", ""),
+                item.get("symbol", ""),
                 item.get("duration", 15),
             )
             for item in payload.get("playlist", [])
@@ -196,6 +303,8 @@ def fetch_current():
             "screen": payload.get("screen", "message"),
             "label": payload.get("label", "WestWall"),
             "lines": payload.get("lines", ["WestWall Ready"]),
+            "icon": payload.get("icon", "message"),
+            "symbol": payload.get("symbol", ""),
             "duration": 30,
         }]
         if not sleeping:
