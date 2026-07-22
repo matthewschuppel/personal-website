@@ -84,7 +84,7 @@ export function flightFromCalendarEvent(event: CalendarEvent): WestWallUpcomingF
     gate: detail(searchable, /\bgate\s*[:#-]?\s*([A-Z0-9-]+)/i),
     terminal: detail(searchable, /\bterminal\s*[:#-]?\s*([A-Z0-9-]+)/i),
     status: "Scheduled",
-    seat: detail(searchable, /\bseat\s*[:#-]?\s*([A-Z0-9-]+)/i),
+    seat: detail(searchable, /\bseats?\b\s*[:#-]?\s*([0-9]{1,2}[A-Z](?:\s*,\s*[0-9]{1,2}[A-Z])*)\b/i),
     confirmation: detail(searchable, /\b(?:confirmation|record locator|conf)\s*[:#-]?\s*([A-Z0-9]+)/i),
     source: "calendar",
     sourceEventId: event.id,
@@ -94,7 +94,13 @@ export function flightFromCalendarEvent(event: CalendarEvent): WestWallUpcomingF
 
 export async function syncWestWallFlightsFromCalendar({ refresh = false }: { refresh?: boolean } = {}) {
   const calendar = await getAppleCalendarEvents({ refresh });
-  const flights = calendar.events.map(flightFromCalendarEvent).filter((flight): flight is WestWallUpcomingFlight => Boolean(flight));
+  const detectedFlights = calendar.events.map(flightFromCalendarEvent).filter((flight): flight is WestWallUpcomingFlight => Boolean(flight));
+  const uniqueFlights = new Map<string, WestWallUpcomingFlight>();
+  for (const flight of detectedFlights) {
+    const key = `${flight.flightNumber.replaceAll(" ", "")}|${flight.departureAirport}|${flight.arrivalAirport}|${flight.departureTime}`;
+    if (!uniqueFlights.has(key)) uniqueFlights.set(key, flight);
+  }
+  const flights = [...uniqueFlights.values()];
 
   for (const flight of flights) await upsertCalendarWestWallFlight(flight);
   await pruneCalendarWestWallFlights(flights.map((flight) => flight.sourceEventId));
