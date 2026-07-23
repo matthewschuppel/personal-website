@@ -1,14 +1,18 @@
 import type { WestWallSavedLocation, WestWallStockTicker, WestWallUpcomingFlight, WestWallWeatherLocation } from "@/data/westwall";
 
-export type AircraftProviderName = "OpenSky" | "ADS-B Exchange" | "FlightAware" | "Custom API";
+export type AircraftProviderName = "ADSB.lol" | "OpenSky" | "ADS-B Exchange" | "FlightAware" | "Custom API";
 
 export type NearbyAircraft = {
   callsign: string;
   airline: string;
+  carrierCode: string;
+  registration: string;
   aircraftType: string;
   altitudeFeet: number;
   distanceMiles: number;
   bearing: string;
+  groundSpeedKnots: number;
+  seenSeconds: number;
 };
 
 export type StockQuote = {
@@ -47,6 +51,77 @@ type OpenMeteoResponse = {
     precipitation_probability_max?: number[];
   };
 };
+
+type AdsbLolAircraft = {
+  flight?: string;
+  r?: string;
+  t?: string;
+  ownOp?: string;
+  desc?: string;
+  lat?: number;
+  lon?: number;
+  alt_baro?: number | "ground";
+  alt_geom?: number;
+  gs?: number;
+  seen?: number;
+};
+
+type AdsbLolResponse = {
+  ac?: AdsbLolAircraft[];
+};
+
+type NasdaqQuoteData = {
+  symbol?: string;
+  marketStatus?: string;
+  primaryData?: {
+    lastSalePrice?: string;
+    netChange?: string;
+    percentageChange?: string;
+  };
+};
+
+type NasdaqQuoteResponse = {
+  data?: NasdaqQuoteData;
+};
+
+const airlinePrefixes: Record<string, { name: string; code: string }> = {
+  AAL: { name: "American Airlines", code: "AA" },
+  SWA: { name: "Southwest Airlines", code: "WN" },
+  UAL: { name: "United Airlines", code: "UA" },
+  DAL: { name: "Delta Air Lines", code: "DL" },
+  ASA: { name: "Alaska Airlines", code: "AS" },
+  JBU: { name: "JetBlue", code: "B6" },
+  NKS: { name: "Spirit Airlines", code: "NK" },
+  FFT: { name: "Frontier Airlines", code: "F9" },
+  SKW: { name: "SkyWest", code: "OO" },
+  ENY: { name: "Envoy Air", code: "MQ" },
+  RPA: { name: "Republic Airways", code: "YX" },
+  EDV: { name: "Endeavor Air", code: "9E" },
+  JIA: { name: "PSA Airlines", code: "OH" }
+};
+
+function numericValue(value: string | undefined) {
+  const parsed = Number(String(value ?? "").replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function distanceMiles(fromLat: number, fromLon: number, toLat: number, toLon: number) {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const latDistance = radians(toLat - fromLat);
+  const lonDistance = radians(toLon - fromLon);
+  const a = Math.sin(latDistance / 2) ** 2
+    + Math.cos(radians(fromLat)) * Math.cos(radians(toLat)) * Math.sin(lonDistance / 2) ** 2;
+  return 3958.8 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function bearing(fromLat: number, fromLon: number, toLat: number, toLon: number) {
+  const radians = (degrees: number) => degrees * Math.PI / 180;
+  const y = Math.sin(radians(toLon - fromLon)) * Math.cos(radians(toLat));
+  const x = Math.cos(radians(fromLat)) * Math.sin(radians(toLat))
+    - Math.sin(radians(fromLat)) * Math.cos(radians(toLat)) * Math.cos(radians(toLon - fromLon));
+  const degrees = (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+  return ["N", "NE", "E", "SE", "S", "SW", "W", "NW"][Math.round(degrees / 45) % 8];
+}
 
 const weatherLabels: Record<number, string> = {
   0: "Clear",
@@ -89,14 +164,64 @@ export async function getUpcomingFlightsFromProvider(): Promise<WestWallUpcoming
   return [];
 }
 
-export async function getNearbyAircraftFromProvider(_location: WestWallSavedLocation): Promise<NearbyAircraft[]> {
-  void _location;
-  return [];
+export async function getNearbyAircraftFromProvider(location: WestWallSavedLocation): Promise<NearbyAircraft[]> {
+  const radiusMiles = Math.max(1, Math.min(25, location.radiusMiles || 10));
+  const radiusNauticalMiles = Math.max(1, Math.ceil(radiusMiles / 1.15078));
+  const response = await fetch(`https://api.adsb.lol/v2/point/${location.latitude}/${location.longitude}/${radiusNauticalMiles}`, {
+    headers: { "User-Agent": "MatthewOS-WestWall/1.0" },
+    next: { revalidate: Math.max(5, Math.min(10, location.refreshIntervalSeconds || 10)) }
+  });
+  if (!response.ok) return [];
+
+  const payload = await response.json() as AdsbLolResponse;
+  return (payload.ac ?? []).flatMap((aircraft) => {
+    if (typeof aircraft.lat !== "number" || typeof aircraft.lon !== "number") return [];
+    const seenSeconds = Number(aircraft.seen ?? 99);
+    const miles = distanceMiles(location.latitude, location.longitude, aircraft.lat, aircraft.lon);
+    if (seenSeconds > 15 || miles > radiusMiles || aircraft.alt_baro === "ground") return [];
+    const callsign = aircraft.flight?.trim().toUpperCase() || aircraft.r?.trim().toUpperCase() || "UNKNOWN";
+    const prefix = airlinePrefixes[callsign.slice(0, 3)];
+    const altitude = typeof aircraft.alt_baro === "number" ? aircraft.alt_baro : aircraft.alt_geom ?? 0;
+    return [{
+      callsign,
+      airline: prefix?.name || aircraft.ownOp?.trim() || "Private aircraft",
+      carrierCode: prefix?.code || "",
+      registration: aircraft.r?.trim().toUpperCase() || "",
+      aircraftType: aircraft.t?.trim().toUpperCase() || aircraft.desc?.trim().toUpperCase() || "AIRCRAFT",
+      altitudeFeet: Math.round(altitude),
+      distanceMiles: Math.round(miles * 10) / 10,
+      bearing: bearing(location.latitude, location.longitude, aircraft.lat, aircraft.lon),
+      groundSpeedKnots: Math.round(aircraft.gs ?? 0),
+      seenSeconds
+    }];
+  }).sort((a, b) => a.distanceMiles - b.distanceMiles || a.altitudeFeet - b.altitudeFeet);
 }
 
-export async function getStockQuotesFromProvider(_tickers: WestWallStockTicker[]): Promise<StockQuote[]> {
-  void _tickers;
-  return [];
+export async function getStockQuotesFromProvider(tickers: WestWallStockTicker[]): Promise<StockQuote[]> {
+  const quotes = await Promise.all(tickers.map(async (ticker) => {
+    if (ticker.assetType === "Crypto") return null;
+    const assetClass = ticker.assetType === "ETF" ? "etf" : ticker.assetType === "Index" ? "index" : "stocks";
+    const response = await fetch(`https://api.nasdaq.com/api/quote/${encodeURIComponent(ticker.symbol)}/info?assetclass=${assetClass}`, {
+      headers: {
+        Accept: "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (compatible; MatthewOS-WestWall/1.0)"
+      },
+      next: { revalidate: Math.max(30, Math.min(120, ticker.refreshIntervalSeconds || 60)) }
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as NasdaqQuoteResponse;
+    const quote = payload.data?.primaryData;
+    const price = numericValue(quote?.lastSalePrice);
+    if (!price) return null;
+    return {
+      symbol: payload.data?.symbol?.toUpperCase() || ticker.symbol,
+      price,
+      change: numericValue(quote?.netChange),
+      percentChange: numericValue(quote?.percentageChange),
+      marketStatus: payload.data?.marketStatus?.toLowerCase().includes("open") ? "open" as const : "closed" as const
+    };
+  }));
+  return quotes.filter((quote) => quote !== null) as StockQuote[];
 }
 
 export async function getWeatherFromProvider(location: WestWallWeatherLocation, units: "imperial" | "metric" = "imperial"): Promise<WeatherSnapshot | null> {

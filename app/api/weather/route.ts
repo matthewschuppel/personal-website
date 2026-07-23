@@ -27,7 +27,14 @@ type WeatherResponse = {
   };
 };
 
-const fallbackLocation = "Dallas, TX";
+const fallbackLocation = "Corinth, TX";
+const fallbackGeocoded: GeocodingResult = {
+  name: "Corinth",
+  admin1: "Texas",
+  country_code: "US",
+  latitude: 33.143288,
+  longitude: -97.068141
+};
 
 const weatherCodeLabels: Record<number, string> = {
   0: "Clear",
@@ -100,7 +107,9 @@ async function getWeather(latitude: number, longitude: number) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const requestedLocation = searchParams.get("location")?.trim() || fallbackLocation;
-  const geocoded = await geocodeLocation(requestedLocation) ?? await geocodeLocation(fallbackLocation);
+  const geocoded = requestedLocation.toLowerCase() === fallbackLocation.toLowerCase()
+    ? fallbackGeocoded
+    : await geocodeLocation(requestedLocation) ?? fallbackGeocoded;
 
   if (!geocoded) {
     return NextResponse.json({ error: "Location not found" }, { status: 404 });

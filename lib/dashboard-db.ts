@@ -112,7 +112,7 @@ export type DashboardSettingsData = {
 
 export const defaultDashboardSettings: DashboardSettingsData = {
   displayName: "Matthew",
-  weatherLocation: "Dallas, TX",
+  weatherLocation: "Corinth, TX",
   defaultSection: "Today",
   compactCards: false
 };

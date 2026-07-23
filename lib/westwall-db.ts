@@ -23,7 +23,14 @@ import {
 } from "@/data/westwall";
 import { createId, getD1Database } from "@/lib/d1";
 import { getAppleCalendarEvents, type CalendarEvent } from "@/lib/apple-calendar";
-import { getWeatherFromProvider, type WeatherSnapshot } from "@/lib/westwall-providers";
+import {
+  getNearbyAircraftFromProvider,
+  getStockQuotesFromProvider,
+  getWeatherFromProvider,
+  type NearbyAircraft,
+  type StockQuote,
+  type WeatherSnapshot
+} from "@/lib/westwall-providers";
 
 const DEFAULT_DEVICE_ID = "display-westwall";
 const DEFAULT_DEVICE_SLUG = "westwall";
@@ -500,14 +507,14 @@ export async function createWestWallLocation(input: Partial<WestWallSavedLocatio
   const location: WestWallSavedLocation = {
     id: input.id ?? createId("westwall-location"),
     name: input.name?.trim() || "Saved location",
-    latitude: Number(input.latitude ?? 32.7767),
-    longitude: Number(input.longitude ?? -96.797),
-    radiusMiles: Number(input.radiusMiles ?? 25),
+    latitude: Number(input.latitude ?? 33.143288),
+    longitude: Number(input.longitude ?? -97.068141),
+    radiusMiles: Number(input.radiusMiles ?? 10),
     altitudeFilter: input.altitudeFilter ?? "All",
     airlineFilter: input.airlineFilter ?? "All",
     aircraftTypeFilter: input.aircraftTypeFilter ?? "All",
-    refreshIntervalSeconds: Number(input.refreshIntervalSeconds ?? 60),
-    dataSource: input.dataSource ?? "OpenSky",
+    refreshIntervalSeconds: Number(input.refreshIntervalSeconds ?? 10),
+    dataSource: input.dataSource ?? "ADSB.lol",
     isDefault: Boolean(input.isDefault)
   };
 
@@ -563,9 +570,9 @@ export async function createWestWallWeatherLocation(input: Partial<WestWallWeath
   const db = getDbOrNull();
   const location: WestWallWeatherLocation = {
     id: input.id ?? createId("westwall-weather"),
-    name: input.name?.trim() || "Dallas, TX",
-    latitude: Number(input.latitude ?? 32.7767),
-    longitude: Number(input.longitude ?? -96.797),
+    name: input.name?.trim() || "Corinth, TX",
+    latitude: Number(input.latitude ?? 33.143288),
+    longitude: Number(input.longitude ?? -97.068141),
     isDefault: Boolean(input.isDefault)
   };
 
@@ -786,15 +793,19 @@ export async function buildWestWallCurrentPayload() {
     .filter((flight) => !flight.departureTime || Date.parse(flight.departureTime) >= now - 12 * 60 * 60 * 1000)
     .sort((a, b) => Date.parse(a.departureTime || "9999-12-31") - Date.parse(b.departureTime || "9999-12-31"))[0];
   const defaultWeather = data.weatherLocations.find((location) => location.isDefault) ?? data.weatherLocations[0];
-  let weather: WeatherSnapshot | null = null;
-  if (defaultWeather) {
-    try {
-      weather = await getWeatherFromProvider(defaultWeather, data.appearance.units);
-    } catch {
-      // Weather is optional; keep the rest of the playlist available if its provider is down.
-    }
-  }
+  const defaultAircraftLocation = data.locations.find((location) => location.isDefault) ?? data.locations[0];
   const enabledStocks = data.stocks.filter((stock) => stock.enabled).sort((a, b) => a.priority - b.priority);
+  let weather: WeatherSnapshot | null = null;
+  let nearbyAircraft: NearbyAircraft[] = [];
+  let stockQuotes: StockQuote[] = [];
+  const [weatherResult, aircraftResult, stockResult] = await Promise.allSettled([
+    defaultWeather ? getWeatherFromProvider(defaultWeather, data.appearance.units) : Promise.resolve(null),
+    defaultAircraftLocation ? getNearbyAircraftFromProvider(defaultAircraftLocation) : Promise.resolve([]),
+    enabledStocks.length ? getStockQuotesFromProvider(enabledStocks) : Promise.resolve([])
+  ]);
+  if (weatherResult.status === "fulfilled") weather = weatherResult.value;
+  if (aircraftResult.status === "fulfilled") nearbyAircraft = aircraftResult.value;
+  if (stockResult.status === "fulfilled") stockQuotes = stockResult.value;
   const timeFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric", minute: "2-digit" });
   const dateFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
@@ -810,18 +821,60 @@ export async function buildWestWallCurrentPayload() {
     return Object.entries(knownAirlines).find(([name]) => normalized.includes(name))?.[1] ?? flight.airline.slice(0, 2).toUpperCase();
   }
 
+  function airlineIcon(code: string) {
+    const normalized = code.toLowerCase();
+    return ["aa", "wn", "ua", "dl", "as", "b6", "nk", "f9", "ac", "ba"].includes(normalized)
+      ? `airline-${normalized}`
+      : "aircraft";
+  }
+
+  function price(value: number) {
+    return value >= 1000 ? value.toFixed(0) : value.toFixed(2);
+  }
+
+  function displayLabel(screen: WestWallRotationScreen) {
+    const labels: Partial<Record<WestWallRotationScreen["key"], string>> = {
+      "upcoming-flights": "UPCOMING FLIGHT",
+      "nearby-aircraft": "OVER CORINTH",
+      stocks: "LIVE MARKET",
+      weather: "CORINTH WEATHER",
+      clock: "CLOCK",
+      "calendar-preview": "CALENDAR",
+      "custom-message": "MESSAGE",
+      "home-status": "HOME"
+    };
+    return labels[screen.key] ?? screen.label;
+  }
+
   function screenContent(screen: WestWallRotationScreen) {
     switch (screen.key) {
       case "upcoming-flights":
-        return { icon: "plane", symbol: airlineSymbol(nextFlight), lines: nextFlight ? [
+        return { icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), lines: nextFlight ? [
           `${nextFlight.flightNumber} ${nextFlight.status}`,
           `${nextFlight.departureAirport} > ${nextFlight.arrivalAirport}`,
           `${nextFlight.departureTime ? dateFormatter.format(new Date(nextFlight.departureTime)) : "Time TBD"}${nextFlight.gate ? ` GATE ${nextFlight.gate}` : ""}`
         ] : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"] };
       case "nearby-aircraft":
-        return { icon: "aircraft", symbol: "", lines: [screen.label, screen.preview || "SCANNING THE SKY", "LOCATION READY"] };
-      case "stocks":
-        return { icon: "chart", symbol: enabledStocks[0]?.symbol?.slice(0, 3) ?? "", lines: enabledStocks.length ? ["MARKET WATCH", enabledStocks.slice(0, 3).map((stock) => stock.symbol).join("  "), enabledStocks.slice(3, 6).map((stock) => stock.symbol).join("  ")] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"] };
+        if (nearbyAircraft[0]) {
+          const aircraft = nearbyAircraft[0];
+          return {
+            icon: airlineIcon(aircraft.carrierCode),
+            symbol: aircraft.carrierCode || aircraft.registration.slice(0, 3),
+            lines: [
+              `${aircraft.callsign} ${aircraft.aircraftType}`,
+              `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing} OF CORINTH`,
+              `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`
+            ]
+          };
+        }
+        return { icon: "aircraft", symbol: "", lines: ["SKY CLEAR", "NO AIRCRAFT WITHIN", `${defaultAircraftLocation?.radiusMiles ?? 10} MI OF CORINTH`] };
+      case "stocks": {
+        const lines = stockQuotes.flatMap((quote) => {
+          const sign = quote.change >= 0 ? "+" : "";
+          return [`${quote.symbol} $${price(quote.price)}`, `${sign}${quote.change.toFixed(2)} ${sign}${quote.percentChange.toFixed(2)}% TODAY`];
+        });
+        return { icon: "chart", symbol: stockQuotes[0]?.symbol?.slice(0, 3) ?? "", lines: lines.length ? lines : enabledStocks.length ? ["LIVE QUOTES UNAVAILABLE", enabledStocks.map((stock) => stock.symbol).join("  "), "TRYING AGAIN SOON"] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"] };
+      }
       case "weather":
         return { icon: weather?.icon ?? "cloud", symbol: weather ? String(weather.temperature) : "", lines: weather ? [weather.location, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.conditions}`, `H${weather.high} L${weather.low} R${weather.rainChance}%`] : [defaultWeather?.name ?? "Dallas, TX", "WEATHER UNAVAILABLE", "TRYING AGAIN SOON"] };
       case "clock":
@@ -831,7 +884,7 @@ export async function buildWestWallCurrentPayload() {
         return { icon: "calendar", symbol: "", lines: event ? ["NEXT EVENT", event.title, dateFormatter.format(new Date(event.startsAt))] : ["CALENDAR CLEAR", "NO UPCOMING EVENTS", timeFormatter.format(new Date())] };
       }
       case "custom-message":
-        return { icon: "message", symbol: "", lines: scheduledMessage ? [scheduledMessage.message, "MESSAGE FROM", "MATTHEWOS"] : [screen.label, screen.preview || "NO ACTIVE MESSAGE"] };
+        return { icon: "message", symbol: "", lines: scheduledMessage ? [scheduledMessage.title, scheduledMessage.message, "MESSAGE FROM MATTHEWOS"] : [screen.label, screen.preview || "NO ACTIVE MESSAGE"] };
       case "home-status":
         return { icon: "home", symbol: "", lines: [screen.label, screen.preview || "HOME SYSTEMS NOMINAL", timeFormatter.format(new Date())] };
       default:
@@ -847,7 +900,7 @@ export async function buildWestWallCurrentPayload() {
     const content = screenContent(screen);
     return {
       screen: screen.key,
-      label: scheduledMessage?.title ?? screen.label,
+      label: scheduledMessage ? "MESSAGE" : displayLabel(screen),
       lines: content.lines,
       icon: data.appearance.showIcons ? content.icon : "none",
       symbol: data.appearance.showIcons ? content.symbol : "",

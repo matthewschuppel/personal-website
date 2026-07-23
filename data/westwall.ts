@@ -59,7 +59,7 @@ export type WestWallSavedLocation = {
   airlineFilter: string;
   aircraftTypeFilter: string;
   refreshIntervalSeconds: number;
-  dataSource: "OpenSky" | "ADS-B Exchange" | "FlightAware" | "Custom API";
+  dataSource: "ADSB.lol" | "OpenSky" | "ADS-B Exchange" | "FlightAware" | "Custom API";
   isDefault: boolean;
 };
 
@@ -157,9 +157,9 @@ export const mockWestWallDevice: WestWallDevice = {
 
 export const mockWestWallRotation: WestWallRotationScreen[] = [
   { id: "screen-flights", key: "upcoming-flights", label: "Upcoming Flights", enabled: true, durationSeconds: 18, priority: 1, preview: "AA 2481 DFW -> ORD 8:35A" },
-  { id: "screen-aircraft", key: "nearby-aircraft", label: "Flights Above My Location", enabled: true, durationSeconds: 14, priority: 2, preview: "SWA1123 12mi NW 31k ft" },
+  { id: "screen-aircraft", key: "nearby-aircraft", label: "Aircraft Over Corinth", enabled: true, durationSeconds: 14, priority: 2, preview: "Live ADS-B within 10 miles" },
   { id: "screen-stocks", key: "stocks", label: "Stock Ticker", enabled: true, durationSeconds: 20, priority: 3, preview: "SPY 627.12 +0.4%  AAPL +1.1%" },
-  { id: "screen-weather", key: "weather", label: "Weather", enabled: true, durationSeconds: 16, priority: 4, preview: "Dallas 91F Sunny Wind 9mph" },
+  { id: "screen-weather", key: "weather", label: "Weather", enabled: true, durationSeconds: 16, priority: 4, preview: "Corinth 91F Sunny Wind 9mph" },
   { id: "screen-clock", key: "clock", label: "Clock", enabled: true, durationSeconds: 10, priority: 5, preview: "Tue 6:42 PM" },
   { id: "screen-message", key: "custom-message", label: "Custom Message", enabled: false, durationSeconds: 12, priority: 6, preview: "Welcome home, Matthew" },
   { id: "screen-calendar", key: "calendar-preview", label: "Calendar Preview", enabled: true, durationSeconds: 14, priority: 7, preview: "7:30 Dinner / Tomorrow: Travel" },
@@ -189,15 +189,15 @@ export const mockWestWallFlights: WestWallUpcomingFlight[] = [
 export const mockWestWallLocations: WestWallSavedLocation[] = [
   {
     id: "loc-001",
-    name: "Home",
-    latitude: 32.7767,
-    longitude: -96.797,
-    radiusMiles: 35,
+    name: "Corinth, TX",
+    latitude: 33.143288,
+    longitude: -97.068141,
+    radiusMiles: 10,
     altitudeFilter: "0-45000 ft",
     airlineFilter: "All",
     aircraftTypeFilter: "All",
-    refreshIntervalSeconds: 60,
-    dataSource: "OpenSky",
+    refreshIntervalSeconds: 10,
+    dataSource: "ADSB.lol",
     isDefault: true
   }
 ];
@@ -209,7 +209,7 @@ export const mockWestWallStocks: WestWallStockTicker[] = [
 ];
 
 export const mockWestWallWeatherLocations: WestWallWeatherLocation[] = [
-  { id: "weather-001", name: "Dallas, TX", latitude: 32.7767, longitude: -96.797, isDefault: true }
+  { id: "weather-001", name: "Corinth, TX", latitude: 33.143288, longitude: -97.068141, isDefault: true }
 ];
 
 export const mockWestWallAppearance: WestWallAppearanceSettings = {

@@ -22,11 +22,11 @@ import wifi
 from adafruit_display_text import label
 
 
-FIRMWARE_VERSION = "1.2.0"
+FIRMWARE_VERSION = "1.3.1"
 WIDTH = 128
 HEIGHT = 64
-POLL_SECONDS = 30
-CHECKIN_SECONDS = 60
+POLL_SECONDS = 10
+CHECKIN_SECONDS = 20
 COMMAND_SECONDS = 30
 
 API_BASE = os.getenv("WESTWALL_API_URL", "https://matthewschuppel.com").rstrip("/")
@@ -78,17 +78,19 @@ blank_root = displayio.Group()
 display.root_group = root
 
 header = label.Label(terminalio.FONT, text="WESTWALL", color=0xFFFF00, x=2, y=5)
-icon_bitmap = displayio.Bitmap(16, 16, 2)
-icon_palette = displayio.Palette(2)
+icon_bitmap = displayio.Bitmap(24, 24, 4)
+icon_palette = displayio.Palette(4)
 icon_palette[0] = 0x000000
 icon_palette[1] = 0xFFFF00
+icon_palette[2] = 0xFFFFFF
+icon_palette[3] = 0x00FFFF
 icon_palette.make_transparent(0)
-icon_tile = displayio.TileGrid(icon_bitmap, pixel_shader=icon_palette, x=2, y=14)
+icon_tile = displayio.TileGrid(icon_bitmap, pixel_shader=icon_palette, x=1, y=13)
 icon_badge = label.Label(terminalio.FONT, text="", color=0x00FFFF, x=2, y=46)
 line_labels = [
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=20),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=34),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=23, y=48),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=20),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=34),
+    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=48),
 ]
 status = label.Label(terminalio.FONT, text="BOOTING", color=0x00FF40, x=2, y=60)
 root.append(header)
@@ -103,12 +105,64 @@ current_render_signature = None
 playlist = []
 playlist_index = 0
 playlist_started = time.monotonic()
+current_pages = []
+page_index = 0
 sleeping = False
 
 ICON_PATTERNS = {
     "plane": (
         "...#....", "..##....", "..##....", "########",
         "..##....", "...#....", "...#....", "........",
+    ),
+    "airline-aa": (
+        ".....11.....", "....111.....", "...1111.....", "..11111.....",
+        ".111111.....", "111111......", "......222222", ".....222222.",
+        "....222222..", "...22222....", "..2222......", ".222........",
+    ),
+    "airline-wn": (
+        "..111..111..", ".1111111111.", "111111111111", "111111111111",
+        ".2222222222.", ".2222222222.", "..22222222..", "..33333333..",
+        "...333333...", "....3333....", ".....33.....", "............",
+    ),
+    "airline-ua": (
+        "....1111....", "..11222211..", ".1221111221.", "121122112221",
+        "121211121121", "122111111221", "122111111221", "121211121121",
+        "121122112221", ".1221111221.", "..11222211..", "....1111....",
+    ),
+    "airline-dl": (
+        ".....11.....", "....1111....", "...111111...", "..11111111..",
+        ".1111111111.", "111111111111", "....2222....", "...222222...",
+        "..22222222..", ".2222222222.", "222222222222", "............",
+    ),
+    "airline-as": (
+        "............", ".....11.....", "....1111....", "...112211...",
+        "..11222211..", ".1122222211.", "111222222111", "...222222...",
+        "..222..222..", ".22......22.", "............", "............",
+    ),
+    "airline-b6": (
+        "111222111222", "111222111222", "222111222111", "222111222111",
+        "111222111222", "111222111222", "222111222111", "222111222111",
+        "111222111222", "111222111222", "222111222111", "222111222111",
+    ),
+    "airline-nk": (
+        "....1111....", "..11111111..", ".11..11..11.", "11...11...11",
+        "11.111111.11", "111111111111", "111111111111", "11.111111.11",
+        "11...11...11", ".11..11..11.", "..11111111..", "....1111....",
+    ),
+    "airline-f9": (
+        ".....11.....", "....1111....", "...111111...", "..11111111..",
+        ".1111111111.", "111111111111", "....2222....", "...222222...",
+        "..22222222..", ".2222222222.", "222222222222", "............",
+    ),
+    "airline-ac": (
+        ".....11.....", "...1.11.1...", ".1.111111.1.", "..11111111..",
+        "111111111111", ".1111111111.", "..11111111..", "...111111...",
+        ".....11.....", ".....11.....", "....1111....", "............",
+    ),
+    "airline-ba": (
+        "111111......", ".1111111....", "..1111111...", "....111111..",
+        "......111111", "............", "222222222222", "..2222222222",
+        "....22222222", "......222222", "........2222", "..........22",
     ),
     "aircraft": (
         "...##...", "...##...", "#..##..#", "########",
@@ -181,6 +235,19 @@ ICON_COLORS = {
     "home": 0x00FF00,
 }
 
+ICON_PALETTES = {
+    "airline-aa": (0x0000FF, 0xFF0000, 0xFFFFFF),
+    "airline-wn": (0x0000FF, 0xFF0000, 0xFFFF00),
+    "airline-ua": (0x0000FF, 0x00FFFF, 0xFFFFFF),
+    "airline-dl": (0xFF0000, 0x0000FF, 0xFFFFFF),
+    "airline-as": (0x00FFFF, 0xFFFFFF, 0x0000FF),
+    "airline-b6": (0x0000FF, 0x00FFFF, 0xFFFFFF),
+    "airline-nk": (0xFFFF00, 0xFFFFFF, 0xFF0000),
+    "airline-f9": (0x00FF00, 0xFFFFFF, 0xFFFF00),
+    "airline-ac": (0xFF0000, 0xFFFFFF, 0x00FFFF),
+    "airline-ba": (0x0000FF, 0xFF0000, 0xFFFFFF),
+}
+
 
 def fit(text, max_characters=21):
     value = str(text or "").strip()
@@ -190,20 +257,55 @@ def fit(text, max_characters=21):
 
 
 def set_icon(icon_name, symbol=""):
-    pattern = ICON_PATTERNS.get(icon_name)
-    for y in range(16):
-        for x in range(16):
+    pattern = ICON_PATTERNS.get(icon_name) or ICON_PATTERNS.get("aircraft")
+    for y in range(24):
+        for x in range(24):
             icon_bitmap[x, y] = 0
     if pattern:
-        icon_palette[1] = ICON_COLORS.get(icon_name, 0xFFFF00)
+        colors = ICON_PALETTES.get(icon_name, (ICON_COLORS.get(icon_name, 0xFFFF00), 0xFFFFFF, 0x00FFFF))
+        icon_palette[1] = colors[0]
+        icon_palette[2] = colors[1]
+        icon_palette[3] = colors[2]
+        scale = max(1, 24 // max(len(pattern), len(pattern[0])))
         for source_y, row in enumerate(pattern):
             for source_x, pixel in enumerate(row):
-                if pixel == "#":
-                    icon_bitmap[source_x * 2, source_y * 2] = 1
-                    icon_bitmap[source_x * 2 + 1, source_y * 2] = 1
-                    icon_bitmap[source_x * 2, source_y * 2 + 1] = 1
-                    icon_bitmap[source_x * 2 + 1, source_y * 2 + 1] = 1
+                color_index = 1 if pixel == "#" else int(pixel) if pixel in "123" else 0
+                if color_index:
+                    for offset_y in range(scale):
+                        for offset_x in range(scale):
+                            icon_bitmap[source_x * scale + offset_x, source_y * scale + offset_y] = color_index
     icon_badge.text = fit(symbol, 3)
+
+
+def wrap_text(lines, max_characters=16):
+    wrapped = []
+    for raw_line in lines:
+        words = str(raw_line or "").strip().split()
+        if not words:
+            wrapped.append("")
+            continue
+        current = ""
+        for word in words:
+            while len(word) > max_characters:
+                if current:
+                    wrapped.append(current)
+                    current = ""
+                wrapped.append(word[:max_characters])
+                word = word[max_characters:]
+            candidate = word if not current else current + " " + word
+            if len(candidate) <= max_characters:
+                current = candidate
+            else:
+                wrapped.append(current)
+                current = word
+        if current:
+            wrapped.append(current)
+    return wrapped or [""]
+
+
+def text_pages(lines):
+    wrapped = wrap_text(lines)
+    return [wrapped[index:index + 3] for index in range(0, len(wrapped), 3)]
 
 
 def show_lines(lines, screen="message", heading=None, icon="message", symbol=""):
@@ -212,26 +314,44 @@ def show_lines(lines, screen="message", heading=None, icon="message", symbol="")
     header.text = fit((heading or screen).replace("-", " ").upper(), 20)
     set_icon(icon, symbol)
     for index, text_label in enumerate(line_labels):
-        text_label.text = fit(lines[index] if index < len(lines) else "", 17)
+        text_label.text = fit(lines[index] if index < len(lines) else "", 16)
     status.text = "ONLINE"
 
 
+def show_current_page():
+    global playlist_started
+    item = playlist[playlist_index]
+    show_lines(current_pages[page_index], item.get("screen", "message"), item.get("label"), item.get("icon", "message"), item.get("symbol", ""))
+    playlist_started = time.monotonic()
+
+
 def show_playlist_item(index):
-    global playlist_index, playlist_started
+    global playlist_index, current_pages, page_index
     if not playlist:
         return
     playlist_index = index % len(playlist)
     item = playlist[playlist_index]
-    show_lines(item.get("lines", []), item.get("screen", "message"), item.get("label"), item.get("icon", "message"), item.get("symbol", ""))
-    playlist_started = time.monotonic()
+    current_pages = text_pages(item.get("lines", []))
+    page_index = 0
+    show_current_page()
 
 
 def advance_playlist(now):
-    if sleeping or len(playlist) < 2:
+    global page_index
+    if sleeping or not playlist or not current_pages:
         return
     duration = max(5, int(playlist[playlist_index].get("duration", 15)))
-    if now - playlist_started >= duration:
+    page_duration = duration if len(current_pages) == 1 else max(4, duration // len(current_pages))
+    if now - playlist_started < page_duration:
+        return
+    if page_index + 1 < len(current_pages):
+        page_index += 1
+        show_current_page()
+    elif len(playlist) > 1:
         show_playlist_item(playlist_index + 1)
+    else:
+        page_index = 0
+        show_current_page()
 
 
 def show_status(message, color=0x00FF40):
@@ -274,7 +394,7 @@ def request_json(method, path, body=None):
 
 
 def fetch_current():
-    global current_render_signature, playlist
+    global current_render_signature, playlist, playlist_started
     payload = request_json("GET", "/api/westwall/current")
     # The API's generatedAt value changes on every poll. Compare only values
     # that affect the display so unchanged content is not needlessly redrawn.
@@ -298,6 +418,8 @@ def fetch_current():
         ),
     )
     if render_signature != current_render_signature:
+        previous_screen = playlist[playlist_index].get("screen") if playlist else None
+        previous_started = playlist_started
         current_render_signature = render_signature
         playlist = payload.get("playlist", []) or [{
             "screen": payload.get("screen", "message"),
@@ -308,7 +430,15 @@ def fetch_current():
             "duration": 30,
         }]
         if not sleeping:
-            show_playlist_item(0)
+            next_index = 0
+            if previous_screen:
+                for index, item in enumerate(playlist):
+                    if item.get("screen") == previous_screen:
+                        next_index = index
+                        break
+            show_playlist_item(next_index)
+            if previous_screen:
+                playlist_started = previous_started
 
 
 def send_checkin(started_at):
