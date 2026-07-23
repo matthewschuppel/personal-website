@@ -27,6 +27,8 @@ import {
   getNearbyAircraftFromProvider,
   getStockQuotesFromProvider,
   getWeatherFromProvider,
+  getWestWallProviderHealth,
+  setWestWallCalendarHealth,
   type NearbyAircraft,
   type StockQuote,
   type WeatherSnapshot
@@ -112,6 +114,10 @@ type WeatherLocationRow = {
 };
 
 type SettingsRow = {
+  display_width: number;
+  operating_mode: WestWallAppearanceSettings["operatingMode"];
+  alerts_enabled: number;
+  button_controls: number;
   global_brightness: number;
   auto_brightness: number;
   day_brightness: number;
@@ -257,6 +263,10 @@ function toWeatherLocation(row: WeatherLocationRow): WestWallWeatherLocation {
 
 function toAppearance(row: SettingsRow): WestWallAppearanceSettings {
   return {
+    displayWidth: row.display_width === 256 ? 256 : 128,
+    operatingMode: row.operating_mode ?? "Auto",
+    alertsEnabled: Boolean(row.alerts_enabled),
+    buttonControls: Boolean(row.button_controls),
     globalBrightness: row.global_brightness,
     autoBrightness: Boolean(row.auto_brightness),
     dayBrightness: row.day_brightness,
@@ -324,10 +334,10 @@ export async function ensureWestWallSeeded() {
   await db
     .prepare(
       `INSERT INTO westwall_settings
-      (id, device_id, global_brightness, auto_brightness, day_brightness, night_brightness, sleep_start, sleep_end, color_theme, font_size, scroll_speed, animation_style, show_icons, dot_matrix_preview, units)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      (id, device_id, display_width, operating_mode, alerts_enabled, button_controls, global_brightness, auto_brightness, day_brightness, night_brightness, sleep_start, sleep_end, color_theme, font_size, scroll_speed, animation_style, show_icons, dot_matrix_preview, units)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
-    .bind("settings-westwall", DEFAULT_DEVICE_ID, mockWestWallAppearance.globalBrightness, bool(mockWestWallAppearance.autoBrightness), mockWestWallAppearance.dayBrightness, mockWestWallAppearance.nightBrightness, mockWestWallAppearance.sleepStart, mockWestWallAppearance.sleepEnd, mockWestWallAppearance.colorTheme, mockWestWallAppearance.fontSize, mockWestWallAppearance.scrollSpeed, mockWestWallAppearance.animationStyle, bool(mockWestWallAppearance.showIcons), bool(mockWestWallAppearance.dotMatrixPreview), mockWestWallAppearance.units)
+    .bind("settings-westwall", DEFAULT_DEVICE_ID, mockWestWallAppearance.displayWidth, mockWestWallAppearance.operatingMode, bool(mockWestWallAppearance.alertsEnabled), bool(mockWestWallAppearance.buttonControls), mockWestWallAppearance.globalBrightness, bool(mockWestWallAppearance.autoBrightness), mockWestWallAppearance.dayBrightness, mockWestWallAppearance.nightBrightness, mockWestWallAppearance.sleepStart, mockWestWallAppearance.sleepEnd, mockWestWallAppearance.colorTheme, mockWestWallAppearance.fontSize, mockWestWallAppearance.scrollSpeed, mockWestWallAppearance.animationStyle, bool(mockWestWallAppearance.showIcons), bool(mockWestWallAppearance.dotMatrixPreview), mockWestWallAppearance.units)
     .run();
 
   for (const screen of mockWestWallRotation) {
@@ -367,7 +377,7 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
     await ensureWestWallSeeded();
 
     const deviceRow = await db.prepare("SELECT id, name, slug, status, last_check_in, active_screen, brightness, wifi_rssi, firmware_version FROM westwall_devices WHERE slug = ?").bind(DEFAULT_DEVICE_SLUG).first<DeviceRow>();
-    const settingsRow = await db.prepare("SELECT global_brightness, auto_brightness, day_brightness, night_brightness, sleep_start, sleep_end, color_theme, font_size, scroll_speed, animation_style, show_icons, dot_matrix_preview, units FROM westwall_settings WHERE device_id = ?").bind(DEFAULT_DEVICE_ID).first<SettingsRow>();
+    const settingsRow = await db.prepare("SELECT display_width, operating_mode, alerts_enabled, button_controls, global_brightness, auto_brightness, day_brightness, night_brightness, sleep_start, sleep_end, color_theme, font_size, scroll_speed, animation_style, show_icons, dot_matrix_preview, units FROM westwall_settings WHERE device_id = ?").bind(DEFAULT_DEVICE_ID).first<SettingsRow>();
     const { results: rotationRows = [] } = await db.prepare("SELECT id, screen_key, label, enabled, duration_seconds, priority, preview FROM westwall_rotation_screens WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<RotationRow>();
     const { results: flightRows = [] } = await db.prepare("SELECT id, airline, flight_number, departure_airport, arrival_airport, departure_time, arrival_time, gate, terminal, status, seat, confirmation, source, source_event_id, synced_at FROM westwall_upcoming_flights WHERE device_id = ? AND (departure_time IS NULL OR departure_time = '' OR departure_time >= datetime('now', '-12 hours')) ORDER BY departure_time ASC").bind(DEFAULT_DEVICE_ID).all<FlightRow>();
     const { results: locationRows = [] } = await db.prepare("SELECT id, name, latitude, longitude, radius_miles, altitude_filter, airline_filter, aircraft_type_filter, refresh_interval_seconds, data_source, is_default FROM westwall_saved_locations WHERE device_id = ? ORDER BY is_default DESC, name ASC").bind(DEFAULT_DEVICE_ID).all<LocationRow>();
@@ -714,12 +724,13 @@ export async function updateWestWallAppearance(input: Partial<WestWallAppearance
   await db
     .prepare(
       `UPDATE westwall_settings SET
+        display_width = ?, operating_mode = ?, alerts_enabled = ?, button_controls = ?,
         global_brightness = ?, auto_brightness = ?, day_brightness = ?, night_brightness = ?,
         sleep_start = ?, sleep_end = ?, color_theme = ?, font_size = ?, scroll_speed = ?,
         animation_style = ?, show_icons = ?, dot_matrix_preview = ?, units = ?, updated_at = CURRENT_TIMESTAMP
       WHERE device_id = ?`
     )
-    .bind(next.globalBrightness, bool(next.autoBrightness), next.dayBrightness, next.nightBrightness, next.sleepStart, next.sleepEnd, next.colorTheme, next.fontSize, next.scrollSpeed, next.animationStyle, bool(next.showIcons), bool(next.dotMatrixPreview), next.units, DEFAULT_DEVICE_ID)
+    .bind(next.displayWidth === 256 ? 256 : 128, next.operatingMode, bool(next.alertsEnabled), bool(next.buttonControls), next.globalBrightness, bool(next.autoBrightness), next.dayBrightness, next.nightBrightness, next.sleepStart, next.sleepEnd, next.colorTheme, next.fontSize, next.scrollSpeed, next.animationStyle, bool(next.showIcons), bool(next.dotMatrixPreview), next.units, DEFAULT_DEVICE_ID)
     .run();
 
   return next;
@@ -766,6 +777,10 @@ export async function buildWestWallDeviceConfig() {
         priority: screen.priority
       })),
     appearance: {
+      displayWidth: data.appearance.displayWidth,
+      operatingMode: data.appearance.operatingMode,
+      alertsEnabled: data.appearance.alertsEnabled,
+      buttonControls: data.appearance.buttonControls,
       theme: data.appearance.colorTheme,
       fontSize: data.appearance.fontSize,
       scrollSpeed: data.appearance.scrollSpeed,
@@ -785,13 +800,15 @@ export async function buildWestWallCurrentPayload() {
   let calendarEvents: CalendarEvent[] = [];
   try {
     calendarEvents = (await getAppleCalendarEvents()).events;
+    setWestWallCalendarHealth("live", `${calendarEvents.length} upcoming event${calendarEvents.length === 1 ? "" : "s"}`);
   } catch {
-    // Keep the device payload available even if the private calendar feed fails.
+    setWestWallCalendarHealth("unavailable", "Calendar feed could not be reached");
   }
 
-  const nextFlight = data.flights
+  const upcomingFlights = data.flights
     .filter((flight) => !flight.departureTime || Date.parse(flight.departureTime) >= now - 12 * 60 * 60 * 1000)
-    .sort((a, b) => Date.parse(a.departureTime || "9999-12-31") - Date.parse(b.departureTime || "9999-12-31"))[0];
+    .sort((a, b) => Date.parse(a.departureTime || "9999-12-31") - Date.parse(b.departureTime || "9999-12-31"));
+  const nextFlight = upcomingFlights[0];
   const defaultWeather = data.weatherLocations.find((location) => location.isDefault) ?? data.weatherLocations[0];
   const defaultAircraftLocation = data.locations.find((location) => location.isDefault) ?? data.locations[0];
   const enabledStocks = data.stocks.filter((stock) => stock.enabled).sort((a, b) => a.priority - b.priority);
@@ -806,8 +823,11 @@ export async function buildWestWallCurrentPayload() {
   if (weatherResult.status === "fulfilled") weather = weatherResult.value;
   if (aircraftResult.status === "fulfilled") nearbyAircraft = aircraftResult.value;
   if (stockResult.status === "fulfilled") stockQuotes = stockResult.value;
+  const chicagoNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }));
+  const hour = chicagoNow.getHours();
   const timeFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric", minute: "2-digit" });
   const dateFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  const shortTime = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" });
 
   function airlineSymbol(flight: WestWallUpcomingFlight | undefined) {
     if (!flight) return "";
@@ -832,6 +852,31 @@ export async function buildWestWallCurrentPayload() {
     return value >= 1000 ? value.toFixed(0) : value.toFixed(2);
   }
 
+  function compactFlight(flight: WestWallUpcomingFlight) {
+    const time = flight.departureTime ? shortTime.format(new Date(flight.departureTime)).replace(" ", "") : "TBD";
+    const gate = flight.gate ? ` G${flight.gate}` : "";
+    return `${flight.flightNumber} ${flight.departureAirport}>${flight.arrivalAirport} ${time} ${flight.status}${gate}`;
+  }
+
+  const minutesToFlight = nextFlight?.departureTime ? Math.round((Date.parse(nextFlight.departureTime) - now) / 60_000) : Number.POSITIVE_INFINITY;
+  let resolvedMode: WestWallAppearanceSettings["operatingMode"] = data.appearance.operatingMode;
+  if (resolvedMode === "Auto") {
+    if (minutesToFlight >= 0 && minutesToFlight <= 24 * 60) resolvedMode = "Travel";
+    else if (hour < 6 || hour >= 23) resolvedMode = "Night";
+    else if (hour < 9) resolvedMode = "Morning";
+    else if (hour < 17) resolvedMode = "Workday";
+    else resolvedMode = "Evening";
+  }
+
+  const modeOrder: Record<Exclude<WestWallAppearanceSettings["operatingMode"], "Auto">, WestWallRotationScreen["key"][]> = {
+    Morning: ["weather", "clock", "calendar-preview", "stocks", "nearby-aircraft", "upcoming-flights", "custom-message", "home-status"],
+    Workday: ["upcoming-flights", "stocks", "weather", "calendar-preview", "nearby-aircraft", "clock", "custom-message", "home-status"],
+    Evening: ["nearby-aircraft", "weather", "calendar-preview", "clock", "upcoming-flights", "stocks", "custom-message", "home-status"],
+    Travel: ["upcoming-flights", "weather", "clock", "calendar-preview", "nearby-aircraft", "stocks", "custom-message", "home-status"],
+    Guest: ["clock", "weather", "custom-message", "home-status", "calendar-preview", "nearby-aircraft", "stocks", "upcoming-flights"],
+    Night: ["clock", "weather", "upcoming-flights", "nearby-aircraft", "calendar-preview", "stocks", "custom-message", "home-status"]
+  };
+
   function displayLabel(screen: WestWallRotationScreen) {
     const labels: Partial<Record<WestWallRotationScreen["key"], string>> = {
       "upcoming-flights": "UPCOMING FLIGHT",
@@ -848,35 +893,43 @@ export async function buildWestWallCurrentPayload() {
 
   function screenContent(screen: WestWallRotationScreen) {
     switch (screen.key) {
-      case "upcoming-flights":
-        return { icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), lines: nextFlight ? [
-          `${nextFlight.flightNumber} ${nextFlight.status}`,
-          `${nextFlight.departureAirport} > ${nextFlight.arrivalAirport}`,
-          `${nextFlight.departureTime ? dateFormatter.format(new Date(nextFlight.departureTime)) : "Time TBD"}${nextFlight.gate ? ` GATE ${nextFlight.gate}` : ""}`
-        ] : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"] };
+      case "upcoming-flights": {
+        const flightLines = data.appearance.displayWidth === 256
+          ? upcomingFlights.slice(0, 4).map(compactFlight)
+          : nextFlight ? [`${nextFlight.flightNumber} ${nextFlight.status}`, `${nextFlight.departureAirport} > ${nextFlight.arrivalAirport}`, `${nextFlight.departureTime ? dateFormatter.format(new Date(nextFlight.departureTime)) : "Time TBD"}${nextFlight.gate ? ` GATE ${nextFlight.gate}` : ""}`] : [];
+        return { icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), lines: flightLines.length ? flightLines : ["NO UPCOMING FLIGHTS", "CALENDAR SYNC ON", "ADD TRAVEL IN MATTHEWOS"] };
+      }
       case "nearby-aircraft":
         if (nearbyAircraft[0]) {
           const aircraft = nearbyAircraft[0];
+          const aircraftLines = data.appearance.displayWidth === 256
+            ? nearbyAircraft.slice(0, 4).map((item) => `${item.callsign} ${item.distanceMiles.toFixed(1)}MI ${item.bearing} ${item.altitudeFeet.toLocaleString("en-US")}FT ${item.groundSpeedKnots}KT ${item.aircraftType}`)
+            : [`${aircraft.callsign} ${aircraft.aircraftType}`, `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing} OF CORINTH`, `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`];
           return {
             icon: airlineIcon(aircraft.carrierCode),
             symbol: aircraft.carrierCode || aircraft.registration.slice(0, 3),
-            lines: [
-              `${aircraft.callsign} ${aircraft.aircraftType}`,
-              `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing} OF CORINTH`,
-              `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`
-            ]
+            lines: aircraftLines
           };
         }
         return { icon: "aircraft", symbol: "", lines: ["SKY CLEAR", "NO AIRCRAFT WITHIN", `${defaultAircraftLocation?.radiusMiles ?? 10} MI OF CORINTH`] };
       case "stocks": {
         const lines = stockQuotes.flatMap((quote) => {
           const sign = quote.change >= 0 ? "+" : "";
-          return [`${quote.symbol} $${price(quote.price)}`, `${sign}${quote.change.toFixed(2)} ${sign}${quote.percentChange.toFixed(2)}% TODAY`];
+          return data.appearance.displayWidth === 256
+            ? [`${quote.symbol} $${price(quote.price)} ${sign}${quote.change.toFixed(2)} ${sign}${quote.percentChange.toFixed(2)}% ${quote.trend} ${quote.marketStatus.toUpperCase()}`]
+            : [`${quote.symbol} $${price(quote.price)}`, `${sign}${quote.change.toFixed(2)} ${sign}${quote.percentChange.toFixed(2)}% ${quote.trend}`];
         });
         return { icon: "chart", symbol: stockQuotes[0]?.symbol?.slice(0, 3) ?? "", lines: lines.length ? lines : enabledStocks.length ? ["LIVE QUOTES UNAVAILABLE", enabledStocks.map((stock) => stock.symbol).join("  "), "TRYING AGAIN SOON"] : ["NO TICKERS", "ADD SYMBOLS IN", "MATTHEWOS"] };
       }
-      case "weather":
-        return { icon: weather?.icon ?? "cloud", symbol: weather ? String(weather.temperature) : "", lines: weather ? [weather.location, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.conditions}`, `H${weather.high} L${weather.low} R${weather.rainChance}%`] : [defaultWeather?.name ?? "Dallas, TX", "WEATHER UNAVAILABLE", "TRYING AGAIN SOON"] };
+      case "weather": {
+        const unit = data.appearance.units === "imperial" ? "F" : "C";
+        const forecast = weather?.hourly.slice(0, 3).map((item) => `${shortTime.format(new Date(item.time)).replace(" ", "")} ${item.temperature}${unit} R${item.rainChance}%`) ?? [];
+        const lines = weather ? (data.appearance.displayWidth === 256
+          ? [`${weather.location} ${weather.temperature}${unit} ${weather.conditions} FEELS ${weather.feelsLike}${unit}`, `H${weather.high} L${weather.low} RAIN ${weather.rainChance}% WIND ${weather.wind} AQI ${weather.aqi}`, forecast.join("  "), `SUNRISE ${weather.sunrise.slice(11, 16)}  SUNSET ${weather.sunset.slice(11, 16)}`]
+          : [weather.location, `${weather.temperature}${unit} ${weather.conditions}`, `H${weather.high} L${weather.low} R${weather.rainChance}% AQI${weather.aqi}`])
+          : [defaultWeather?.name ?? "Corinth, TX", "WEATHER UNAVAILABLE", "TRYING AGAIN SOON"];
+        return { icon: weather?.icon ?? "cloud", symbol: weather ? String(weather.temperature) : "", lines };
+      }
       case "clock":
         return { icon: "clock", symbol: "", lines: [timeFormatter.format(new Date()), "MATTHEWOS", data.device.status.toUpperCase()] };
       case "calendar-preview": {
@@ -892,7 +945,8 @@ export async function buildWestWallCurrentPayload() {
     }
   }
 
-  const enabledScreens = data.rotation.filter((screen) => screen.enabled).sort((a, b) => a.priority - b.priority);
+  const profileOrder = modeOrder[resolvedMode as Exclude<typeof resolvedMode, "Auto">] ?? modeOrder.Workday;
+  const enabledScreens = data.rotation.filter((screen) => screen.enabled).sort((a, b) => profileOrder.indexOf(a.key) - profileOrder.indexOf(b.key));
   const playlist = (scheduledMessage
     ? [data.rotation.find((screen) => screen.key === "custom-message") ?? { id: "scheduled", key: "custom-message" as const, label: scheduledMessage.title, enabled: true, durationSeconds: 30, priority: 0, preview: scheduledMessage.message }]
     : enabledScreens
@@ -910,6 +964,19 @@ export async function buildWestWallCurrentPayload() {
 
   const active = playlist[0] ?? { screen: "clock", label: "Clock", lines: [timeFormatter.format(new Date())], icon: "clock", symbol: "", duration: 30 };
 
+  let takeover: { id: string; label: string; lines: string[]; icon: string; symbol: string; duration: number } | null = null;
+  if (data.appearance.alertsEnabled && weather?.severeAlert) {
+    takeover = { id: `weather:${weather.alertHeadline || weather.conditions}`, label: "WEATHER ALERT", lines: [weather.alertHeadline || weather.conditions, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.wind}`, "PRESS A BUTTON TO DISMISS"], icon: "storm", symbol: "!", duration: 30 };
+  } else if (data.appearance.alertsEnabled && minutesToFlight >= 0 && minutesToFlight <= 120 && nextFlight) {
+    takeover = { id: `flight:${nextFlight.id}:${nextFlight.departureTime}`, label: "FLIGHT SOON", lines: [compactFlight(nextFlight), `DEPARTS IN ${minutesToFlight} MIN`, nextFlight.gate ? `GATE ${nextFlight.gate} ${nextFlight.terminal ? `TERMINAL ${nextFlight.terminal}` : ""}` : "CHECK AIRLINE FOR GATE"], icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), duration: 25 };
+  } else if (data.appearance.alertsEnabled && nearbyAircraft[0]?.distanceMiles <= 2) {
+    const aircraft = nearbyAircraft[0];
+    takeover = { id: `aircraft:${aircraft.callsign}:${Math.round(aircraft.distanceMiles)}`, label: "AIRCRAFT OVERHEAD", lines: [`${aircraft.callsign} ${aircraft.aircraftType}`, `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing}`, `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`], icon: airlineIcon(aircraft.carrierCode), symbol: aircraft.carrierCode, duration: 18 };
+  }
+
+  const feedHealth = getWestWallProviderHealth();
+  const brightness = resolvedMode === "Night" ? data.appearance.nightBrightness : data.appearance.autoBrightness ? data.appearance.dayBrightness : data.appearance.globalBrightness;
+
   return {
     screen: active.screen,
     label: active.label,
@@ -917,7 +984,13 @@ export async function buildWestWallCurrentPayload() {
     icon: active.icon,
     symbol: active.symbol,
     playlist,
-    brightness: data.appearance.globalBrightness,
+    takeover,
+    displayWidth: data.appearance.displayWidth,
+    configuredMode: data.appearance.operatingMode,
+    resolvedMode,
+    buttonControls: data.appearance.buttonControls,
+    feedHealth,
+    brightness,
     generatedAt: new Date().toISOString()
   };
 }

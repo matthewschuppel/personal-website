@@ -145,6 +145,10 @@ CREATE TABLE IF NOT EXISTS westwall_devices (
 CREATE TABLE IF NOT EXISTS westwall_settings (
   id TEXT PRIMARY KEY,
   device_id TEXT NOT NULL,
+  display_width INTEGER NOT NULL DEFAULT 128,
+  operating_mode TEXT NOT NULL DEFAULT 'Auto',
+  alerts_enabled INTEGER NOT NULL DEFAULT 1,
+  button_controls INTEGER NOT NULL DEFAULT 1,
   global_brightness INTEGER NOT NULL DEFAULT 64,
   auto_brightness INTEGER NOT NULL DEFAULT 1,
   day_brightness INTEGER NOT NULL DEFAULT 80,

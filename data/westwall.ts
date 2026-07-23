@@ -86,6 +86,10 @@ export type WestWallWeatherLocation = {
 };
 
 export type WestWallAppearanceSettings = {
+  displayWidth: 128 | 256;
+  operatingMode: "Auto" | "Morning" | "Workday" | "Evening" | "Travel" | "Guest" | "Night";
+  alertsEnabled: boolean;
+  buttonControls: boolean;
   globalBrightness: number;
   autoBrightness: boolean;
   dayBrightness: number;
@@ -99,6 +103,14 @@ export type WestWallAppearanceSettings = {
   showIcons: boolean;
   dotMatrixPreview: boolean;
   units: "imperial" | "metric";
+};
+
+export type WestWallFeedHealth = {
+  key: "calendar" | "weather" | "aircraft" | "markets";
+  label: string;
+  status: "live" | "cached" | "unavailable";
+  updatedAt: string;
+  detail: string;
 };
 
 export type WestWallCommandLog = {
@@ -140,6 +152,7 @@ export type WestWallDashboardData = {
   commands: WestWallCommandLog[];
   checkins: WestWallDeviceCheckin[];
   messages: WestWallCustomMessage[];
+  feedHealth?: WestWallFeedHealth[];
 };
 
 export const mockWestWallDevice: WestWallDevice = {
@@ -213,6 +226,10 @@ export const mockWestWallWeatherLocations: WestWallWeatherLocation[] = [
 ];
 
 export const mockWestWallAppearance: WestWallAppearanceSettings = {
+  displayWidth: 128,
+  operatingMode: "Auto",
+  alertsEnabled: true,
+  buttonControls: true,
   globalBrightness: 68,
   autoBrightness: true,
   dayBrightness: 82,

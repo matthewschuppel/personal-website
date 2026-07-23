@@ -12,6 +12,7 @@ import time
 
 import adafruit_requests
 import board
+import digitalio
 import displayio
 import framebufferio
 import microcontroller
@@ -22,12 +23,18 @@ import wifi
 from adafruit_display_text import label
 
 
-FIRMWARE_VERSION = "1.3.1"
-WIDTH = 128
+FIRMWARE_VERSION = "2.0.0"
+# The manager stores 1 (one panel) or 2 (two horizontally chained panels)
+# in nonvolatile memory before rebooting. A blank device always starts safely
+# in the currently installed one-panel configuration.
+WIDTH = 256 if len(microcontroller.nvm) and microcontroller.nvm[0] == 2 else 128
 HEIGHT = 64
 POLL_SECONDS = 10
 CHECKIN_SECONDS = 20
-COMMAND_SECONDS = 30
+COMMAND_SECONDS = 10
+MAX_CHARACTERS = 37 if WIDTH == 256 else 16
+HEADER_CHARACTERS = 42 if WIDTH == 256 else 20
+LINES_PER_PAGE = 4 if WIDTH == 256 else 3
 
 API_BASE = os.getenv("WESTWALL_API_URL", "https://matthewschuppel.com").rstrip("/")
 DEVICE_TOKEN = os.getenv("WESTWALL_DEVICE_TOKEN", "")
@@ -87,11 +94,8 @@ icon_palette[3] = 0x00FFFF
 icon_palette.make_transparent(0)
 icon_tile = displayio.TileGrid(icon_bitmap, pixel_shader=icon_palette, x=1, y=13)
 icon_badge = label.Label(terminalio.FONT, text="", color=0x00FFFF, x=2, y=46)
-line_labels = [
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=20),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=34),
-    label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=48),
-]
+line_y_positions = (16, 28, 40, 52) if WIDTH == 256 else (20, 34, 48)
+line_labels = [label.Label(terminalio.FONT, text="", color=0xFFFFFF, x=29, y=y) for y in line_y_positions]
 status = label.Label(terminalio.FONT, text="BOOTING", color=0x00FF40, x=2, y=60)
 root.append(header)
 root.append(icon_tile)
@@ -108,6 +112,25 @@ playlist_started = time.monotonic()
 current_pages = []
 page_index = 0
 sleeping = False
+paused = False
+button_controls_enabled = True
+active_takeover = None
+dismissed_takeover_id = ""
+takeover_started = 0
+takeover_pages = []
+takeover_page_index = 0
+local_brightness = 60
+
+button_up = digitalio.DigitalInOut(board.BUTTON_UP)
+button_up.direction = digitalio.Direction.INPUT
+button_up.pull = digitalio.Pull.UP
+button_down = digitalio.DigitalInOut(board.BUTTON_DOWN)
+button_down.direction = digitalio.Direction.INPUT
+button_down.pull = digitalio.Pull.UP
+button_state = {
+    "up": {"input": button_up, "pressed": False, "started": 0, "held": False},
+    "down": {"input": button_down, "pressed": False, "started": 0, "held": False},
+}
 
 ICON_PATTERNS = {
     "plane": (
@@ -277,7 +300,7 @@ def set_icon(icon_name, symbol=""):
     icon_badge.text = fit(symbol, 3)
 
 
-def wrap_text(lines, max_characters=16):
+def wrap_text(lines, max_characters=MAX_CHARACTERS):
     wrapped = []
     for raw_line in lines:
         words = str(raw_line or "").strip().split()
@@ -305,16 +328,16 @@ def wrap_text(lines, max_characters=16):
 
 def text_pages(lines):
     wrapped = wrap_text(lines)
-    return [wrapped[index:index + 3] for index in range(0, len(wrapped), 3)]
+    return [wrapped[index:index + LINES_PER_PAGE] for index in range(0, len(wrapped), LINES_PER_PAGE)]
 
 
 def show_lines(lines, screen="message", heading=None, icon="message", symbol=""):
     global current_screen
     current_screen = screen
-    header.text = fit((heading or screen).replace("-", " ").upper(), 20)
+    header.text = fit((heading or screen).replace("-", " ").upper(), HEADER_CHARACTERS)
     set_icon(icon, symbol)
     for index, text_label in enumerate(line_labels):
-        text_label.text = fit(lines[index] if index < len(lines) else "", 16)
+        text_label.text = fit(lines[index] if index < len(lines) else "", MAX_CHARACTERS)
     status.text = "ONLINE"
 
 
@@ -336,9 +359,57 @@ def show_playlist_item(index):
     show_current_page()
 
 
+def show_takeover_page():
+    if not active_takeover or not takeover_pages:
+        return
+    show_lines(
+        takeover_pages[takeover_page_index],
+        "alert",
+        active_takeover.get("label", "ALERT"),
+        active_takeover.get("icon", "message"),
+        active_takeover.get("symbol", "!"),
+    )
+
+
+def activate_takeover(item):
+    global active_takeover, takeover_started, takeover_pages, takeover_page_index
+    active_takeover = item
+    takeover_started = time.monotonic()
+    takeover_pages = text_pages(item.get("lines", []))
+    takeover_page_index = 0
+    if not sleeping:
+        show_takeover_page()
+
+
+def dismiss_takeover():
+    global active_takeover, dismissed_takeover_id, takeover_pages
+    if active_takeover:
+        dismissed_takeover_id = active_takeover.get("id", "")
+    active_takeover = None
+    takeover_pages = []
+    if not sleeping and playlist:
+        show_playlist_item(playlist_index)
+
+
+def advance_takeover(now):
+    global takeover_page_index
+    if not active_takeover:
+        return
+    duration = max(8, int(active_takeover.get("duration", 20)))
+    if now - takeover_started >= duration:
+        dismiss_takeover()
+        return
+    if len(takeover_pages) > 1:
+        page_duration = max(3, duration // len(takeover_pages))
+        desired_page = min(len(takeover_pages) - 1, int((now - takeover_started) // page_duration))
+        if desired_page != takeover_page_index:
+            takeover_page_index = desired_page
+            show_takeover_page()
+
+
 def advance_playlist(now):
     global page_index
-    if sleeping or not playlist or not current_pages:
+    if sleeping or paused or active_takeover or not playlist or not current_pages:
         return
     duration = max(5, int(playlist[playlist_index].get("duration", 15)))
     page_duration = duration if len(current_pages) == 1 else max(4, duration // len(current_pages))
@@ -357,6 +428,61 @@ def advance_playlist(now):
 def show_status(message, color=0x00FF40):
     status.color = color
     status.text = fit(message.upper(), 20)
+
+
+def set_brightness(percent):
+    global local_brightness
+    local_brightness = max(5, min(100, int(percent)))
+    try:
+        display.brightness = local_brightness / 100
+    except (AttributeError, ValueError):
+        pass
+
+
+def handle_short_button(name):
+    if active_takeover:
+        dismiss_takeover()
+        return
+    if not playlist:
+        return
+    if name == "up":
+        show_playlist_item(playlist_index - 1)
+    else:
+        show_playlist_item(playlist_index + 1)
+
+
+def handle_long_button(name):
+    global paused
+    if name == "up":
+        levels = (15, 35, 60, 85)
+        next_level = levels[0]
+        for level in levels:
+            if level > local_brightness:
+                next_level = level
+                break
+        set_brightness(next_level)
+        show_status("BRIGHT " + str(next_level))
+    else:
+        paused = not paused
+        show_status("PAUSED" if paused else "PLAYING")
+
+
+def poll_buttons(now):
+    if not button_controls_enabled or sleeping:
+        return
+    for name, state in button_state.items():
+        is_pressed = not state["input"].value
+        if is_pressed and not state["pressed"]:
+            state["pressed"] = True
+            state["started"] = now
+            state["held"] = False
+        elif is_pressed and state["pressed"] and not state["held"] and now - state["started"] >= 1.2:
+            state["held"] = True
+            handle_long_button(name)
+        elif not is_pressed and state["pressed"]:
+            if not state["held"] and now - state["started"] >= 0.04:
+                handle_short_button(name)
+            state["pressed"] = False
 
 
 def connect_wifi():
@@ -394,7 +520,7 @@ def request_json(method, path, body=None):
 
 
 def fetch_current():
-    global current_render_signature, playlist, playlist_started
+    global current_render_signature, playlist, playlist_started, button_controls_enabled
     payload = request_json("GET", "/api/westwall/current")
     # The API's generatedAt value changes on every poll. Compare only values
     # that affect the display so unchanged content is not needlessly redrawn.
@@ -405,6 +531,8 @@ def fetch_current():
         payload.get("icon", ""),
         payload.get("symbol", ""),
         payload.get("brightness"),
+        payload.get("buttonControls", True),
+        payload.get("takeover", {}).get("id", "") if payload.get("takeover") else "",
         tuple(
             (
                 item.get("screen", ""),
@@ -421,6 +549,8 @@ def fetch_current():
         previous_screen = playlist[playlist_index].get("screen") if playlist else None
         previous_started = playlist_started
         current_render_signature = render_signature
+        button_controls_enabled = bool(payload.get("buttonControls", True))
+        set_brightness(payload.get("brightness", 60))
         playlist = payload.get("playlist", []) or [{
             "screen": payload.get("screen", "message"),
             "label": payload.get("label", "WestWall"),
@@ -429,7 +559,13 @@ def fetch_current():
             "symbol": payload.get("symbol", ""),
             "duration": 30,
         }]
-        if not sleeping:
+        incoming_takeover = payload.get("takeover")
+        if incoming_takeover and incoming_takeover.get("id") != dismissed_takeover_id:
+            if not active_takeover or incoming_takeover.get("id") != active_takeover.get("id"):
+                activate_takeover(incoming_takeover)
+        elif active_takeover and not incoming_takeover:
+            dismiss_takeover()
+        if not sleeping and not active_takeover:
             next_index = 0
             if previous_screen:
                 for index, item in enumerate(playlist):
@@ -464,11 +600,17 @@ def acknowledge(command_id, command_status="acknowledged"):
 
 
 def process_commands():
-    global current_screen, sleeping, playlist_started
+    global current_screen, sleeping, playlist_started, paused
     payload = request_json("GET", "/api/westwall/commands/pending")
     for command in payload.get("commands", []):
         command_id = command.get("id", "")
         command_name = command.get("command", "refresh")
+        command_payload = command.get("payload") or {}
+        if isinstance(command_payload, str):
+            try:
+                command_payload = json.loads(command_payload)
+            except ValueError:
+                command_payload = {}
         try:
             if command_name in ("refresh", "reload", "show-now"):
                 fetch_current()
@@ -485,6 +627,23 @@ def process_commands():
                 display.root_group = root
                 playlist_started = time.monotonic()
                 show_playlist_item(playlist_index)
+            elif command_name == "previous_screen":
+                dismiss_takeover()
+                show_playlist_item(playlist_index - 1)
+            elif command_name == "next_screen":
+                dismiss_takeover()
+                show_playlist_item(playlist_index + 1)
+            elif command_name == "toggle_pause":
+                paused = not paused
+                show_status("PAUSED" if paused else "PLAYING")
+            elif command_name == "dismiss_alert":
+                dismiss_takeover()
+            elif command_name == "set_display_width":
+                requested_width = int(command_payload.get("width", 128))
+                microcontroller.nvm[0] = 2 if requested_width == 256 else 1
+                acknowledge(command_id)
+                time.sleep(1)
+                microcontroller.reset()
             elif command_name == "test_pattern":
                 sleeping = False
                 display.root_group = root
@@ -513,11 +672,13 @@ last_checkin = -CHECKIN_SECONDS
 last_commands = -COMMAND_SECONDS
 failure_count = 0
 
-show_lines(["CONNECTING TO", "MATTHEWOS", "PLEASE WAIT"], "startup", "WESTWALL")
+show_lines(["CONNECTING TO", "MATTHEWOS", str(WIDTH) + " X 64"], "startup", "WESTWALL 2")
 
 while True:
     now = time.monotonic()
     try:
+        poll_buttons(now)
+        advance_takeover(now)
         advance_playlist(now)
         connect_wifi()
 

@@ -63,16 +63,16 @@ function Stat({ icon, label, value, tone = "neutral" }: { icon: ReactNode; label
   );
 }
 
-function MatrixPreview({ heading, lines }: { heading: string; lines: string[] }) {
+function MatrixPreview({ heading, lines, width }: { heading: string; lines: string[]; width: 128 | 256 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-white/10 bg-[#090b0c] p-4 shadow-[0_18px_45px_rgba(18,20,18,0.22)]">
       <div className="flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">
-        <span>Live display preview</span><span>128 × 64</span>
+        <span>Live display preview</span><span>{width} × 64</span>
       </div>
       <div className="mt-4 rounded-xl border border-amber/20 bg-black px-5 py-4 font-mono uppercase shadow-inner">
         <p className="truncate text-[11px] tracking-[0.18em] text-yellow-300">{heading}</p>
         <div className="mt-3 space-y-2 text-sm tracking-[0.08em] text-white">
-          {[0, 1, 2].map((index) => <p key={index} className="h-5 truncate">{lines[index] ?? ""}</p>)}
+          {Array.from({ length: width === 256 ? 4 : 3 }, (_, index) => <p key={index} className="h-5 truncate">{lines[index] ?? ""}</p>)}
         </div>
         <div className="mt-3 flex gap-1">{Array.from({ length: 24 }, (_, index) => <span key={index} className={`h-1 flex-1 rounded-full ${index % 4 === 0 ? "bg-yellow-300/80" : "bg-white/10"}`} />)}</div>
       </div>
@@ -234,6 +234,10 @@ export function WestWallDisplayManager() {
     event.preventDefault();
     const values = new FormData(event.currentTarget);
     const appearance: Partial<WestWallAppearanceSettings> = {
+      displayWidth: Number(values.get("displayWidth")) === 256 ? 256 : 128,
+      operatingMode: String(values.get("operatingMode") || "Auto") as WestWallAppearanceSettings["operatingMode"],
+      alertsEnabled: values.get("alertsEnabled") === "on",
+      buttonControls: values.get("buttonControls") === "on",
       globalBrightness: Number(values.get("globalBrightness") || 68),
       autoBrightness: values.get("autoBrightness") === "on",
       dayBrightness: Number(values.get("dayBrightness") || 80),
@@ -269,7 +273,7 @@ export function WestWallDisplayManager() {
               <button type="button" disabled={busy} onClick={() => void sendCommand("wake")} className={primaryButton}><Sun size={15} />Wake display</button>
             </div>
           </div>
-          <MatrixPreview heading={activeMessage?.title || previewScreen?.label || "WestWall"} lines={previewLines} />
+          <MatrixPreview heading={activeMessage?.title || previewScreen?.label || "WestWall"} lines={previewLines} width={data.appearance.displayWidth} />
         </header>
 
         <div className="mt-4 flex items-center gap-2 rounded-2xl border border-ink/10 bg-white/80 px-4 py-3 text-sm text-ink/60" aria-live="polite">
@@ -293,6 +297,10 @@ export function WestWallDisplayManager() {
               <button disabled={busy} onClick={() => void sendCommand("refresh")} className={secondaryButton}><RefreshCw size={16} />Refresh content</button>
               <button disabled={busy} onClick={() => void sendCommand("test_pattern")} className={secondaryButton}><TestTube2 size={16} />Test colors</button>
               <button disabled={busy} onClick={() => void sendCommand("sleep")} className={secondaryButton}><Moon size={16} />Sleep display</button>
+              <button disabled={busy} onClick={() => void sendCommand("previous_screen")} className={secondaryButton}>Previous screen</button>
+              <button disabled={busy} onClick={() => void sendCommand("next_screen")} className={secondaryButton}>Next screen</button>
+              <button disabled={busy} onClick={() => void sendCommand("toggle_pause")} className={secondaryButton}>Pause / resume</button>
+              <button disabled={busy} onClick={() => void sendCommand("dismiss_alert")} className={secondaryButton}>Dismiss alert</button>
               <button disabled={busy} onClick={() => void sendCommand("reboot")} className={secondaryButton}><CirclePower size={16} />Restart device</button>
             </div>
           </Card>
@@ -301,6 +309,8 @@ export function WestWallDisplayManager() {
               <div className="rounded-xl bg-mist/60 p-4"><Plane size={18} className="text-clay" /><p className="mt-3 text-2xl font-semibold">{data.flights.length}</p><p className="text-xs text-ink/50">Upcoming flights</p></div>
               <div className="rounded-xl bg-mist/60 p-4"><LayoutGrid size={18} className="text-cobalt" /><p className="mt-3 text-2xl font-semibold">{data.rotation.filter((screen) => screen.enabled).length}</p><p className="text-xs text-ink/50">Enabled screens</p></div>
               <div className="rounded-xl bg-mist/60 p-4"><MessageSquareText size={18} className="text-moss" /><p className="mt-3 text-2xl font-semibold">{data.messages.filter((message) => message.enabled).length}</p><p className="text-xs text-ink/50">Active messages</p></div>
+              <div className="rounded-xl bg-mist/60 p-4"><Settings2 size={18} className="text-cobalt" /><p className="mt-3 text-2xl font-semibold">{data.appearance.displayWidth}</p><p className="text-xs text-ink/50">Panel width</p></div>
+              <div className="rounded-xl bg-mist/60 p-4"><Activity size={18} className="text-moss" /><p className="mt-3 text-2xl font-semibold">{data.appearance.operatingMode}</p><p className="text-xs text-ink/50">Operating mode</p></div>
             </div>
           </Card>
           <Card title="Upcoming travel" description="Flights detected from Calendar and flights entered manually." action={<button onClick={() => setActiveTab("Flights")} className={secondaryButton}>Manage</button>}>
@@ -308,6 +318,9 @@ export function WestWallDisplayManager() {
           </Card>
           <Card title="Recent device activity" description="Latest heartbeat and command acknowledgements.">
             <div className="space-y-2 text-sm">{data.commands.slice(0, 4).map((command) => <div key={command.id} className="flex items-center justify-between rounded-xl bg-mist/60 px-4 py-3"><span>{humanize(command.command)}</span><span className="text-xs font-semibold text-ink/45">{command.status}</span></div>)}</div>
+          </Card>
+          <Card title="Live feed health" description="WestWall keeps the last successful result available if a provider briefly drops out.">
+            <div className="space-y-2">{(data.feedHealth ?? []).map((feed) => <div key={feed.key} className="flex items-center justify-between gap-4 rounded-xl bg-mist/60 px-4 py-3"><div><p className="font-semibold">{feed.label}</p><p className="mt-0.5 text-xs text-ink/45">{feed.detail}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${feed.status === "live" ? "bg-moss/10 text-moss" : feed.status === "cached" ? "bg-amber/15 text-ink" : "bg-clay/10 text-clay"}`}>{feed.status}</span></div>)}{!data.feedHealth?.length ? <p className="text-sm text-ink/50">Feed checks will appear after the next refresh.</p> : null}</div>
           </Card>
         </section> : null}
 
@@ -368,7 +381,24 @@ export function WestWallDisplayManager() {
         </section> : null}
 
         {activeTab === "Settings" ? <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_0.8fr]">
-          <Card title="Display preferences" description="Saved centrally so future firmware updates use the same profile."><form onSubmit={saveAppearance} className="grid gap-4 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">BRIGHTNESS<input name="globalBrightness" type="range" min="1" max="100" defaultValue={data.appearance.globalBrightness} className="mt-3 w-full" /></label><label className="text-xs font-semibold text-ink/45">COLOR THEME<select name="colorTheme" defaultValue={data.appearance.colorTheme} className={`${fieldClass} mt-1 w-full`}><option>Amber</option><option>Cyan</option><option>White</option><option>Classic RGB</option></select></label><label className="text-xs font-semibold text-ink/45">SLEEP AT<input name="sleepStart" type="time" defaultValue={data.appearance.sleepStart} className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">WAKE AT<input name="sleepEnd" type="time" defaultValue={data.appearance.sleepEnd} className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">DAY LEVEL<input name="dayBrightness" type="number" min="1" max="100" defaultValue={data.appearance.dayBrightness} className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">NIGHT LEVEL<input name="nightBrightness" type="number" min="1" max="100" defaultValue={data.appearance.nightBrightness} className={`${fieldClass} mt-1 w-full`} /></label><label className="flex items-center gap-2 text-sm"><input name="autoBrightness" type="checkbox" defaultChecked={data.appearance.autoBrightness} />Automatic day/night profile</label><label className="text-xs font-semibold text-ink/45">UNITS<select name="units" defaultValue={data.appearance.units} className={`${fieldClass} mt-1 w-full`}><option value="imperial">Imperial</option><option value="metric">Metric</option></select></label><input type="hidden" name="fontSize" value={data.appearance.fontSize} /><button disabled={busy} className={`${primaryButton} sm:col-span-2`}>Save preferences</button></form></Card>
+          <Card title="Display preferences" description="Choose the physical wall size, automatic behavior, alerts, and brightness in one place.">
+            <form onSubmit={saveAppearance} className="grid gap-4 sm:grid-cols-2">
+              <label className="text-xs font-semibold text-ink/45">WALL SIZE<select name="displayWidth" defaultValue={data.appearance.displayWidth} className={`${fieldClass} mt-1 w-full`}><option value="128">128 × 64 · one panel</option><option value="256">256 × 64 · two chained panels</option></select><small className="mt-1 block font-normal leading-5 text-ink/45">Changing this restarts the S3. Select 256 only after the second panel and adequate 5V power are connected.</small></label>
+              <label className="text-xs font-semibold text-ink/45">OPERATING MODE<select name="operatingMode" defaultValue={data.appearance.operatingMode} className={`${fieldClass} mt-1 w-full`}>{["Auto", "Morning", "Workday", "Evening", "Travel", "Guest", "Night"].map((mode) => <option key={mode}>{mode}</option>)}</select><small className="mt-1 block font-normal leading-5 text-ink/45">Auto prioritizes weather in the morning, work feeds by day, and flights when travel is close.</small></label>
+              <label className="text-xs font-semibold text-ink/45">BRIGHTNESS<input name="globalBrightness" type="range" min="1" max="100" defaultValue={data.appearance.globalBrightness} className="mt-3 w-full" /></label>
+              <label className="text-xs font-semibold text-ink/45">COLOR THEME<select name="colorTheme" defaultValue={data.appearance.colorTheme} className={`${fieldClass} mt-1 w-full`}><option>Amber</option><option>Cyan</option><option>White</option><option>Classic RGB</option></select></label>
+              <label className="text-xs font-semibold text-ink/45">SLEEP AT<input name="sleepStart" type="time" defaultValue={data.appearance.sleepStart} className={`${fieldClass} mt-1 w-full`} /></label>
+              <label className="text-xs font-semibold text-ink/45">WAKE AT<input name="sleepEnd" type="time" defaultValue={data.appearance.sleepEnd} className={`${fieldClass} mt-1 w-full`} /></label>
+              <label className="text-xs font-semibold text-ink/45">DAY LEVEL<input name="dayBrightness" type="number" min="1" max="100" defaultValue={data.appearance.dayBrightness} className={`${fieldClass} mt-1 w-full`} /></label>
+              <label className="text-xs font-semibold text-ink/45">NIGHT LEVEL<input name="nightBrightness" type="number" min="1" max="100" defaultValue={data.appearance.nightBrightness} className={`${fieldClass} mt-1 w-full`} /></label>
+              <label className="flex items-center gap-2 text-sm"><input name="autoBrightness" type="checkbox" defaultChecked={data.appearance.autoBrightness} />Automatic day/night brightness</label>
+              <label className="flex items-center gap-2 text-sm"><input name="alertsEnabled" type="checkbox" defaultChecked={data.appearance.alertsEnabled} />Allow important alert takeovers</label>
+              <label className="flex items-center gap-2 text-sm"><input name="buttonControls" type="checkbox" defaultChecked={data.appearance.buttonControls} />Enable physical button shortcuts</label>
+              <label className="text-xs font-semibold text-ink/45">UNITS<select name="units" defaultValue={data.appearance.units} className={`${fieldClass} mt-1 w-full`}><option value="imperial">Imperial</option><option value="metric">Metric</option></select></label>
+              <input type="hidden" name="fontSize" value={data.appearance.fontSize} />
+              <button disabled={busy} className={`${primaryButton} sm:col-span-2`}><Save size={16} />Save and update wall</button>
+            </form>
+          </Card>
           <Card title="Device details" description="Live telemetry from the physical Matrix Portal."><dl className="space-y-3 text-sm">{[["Name", data.device.name], ["Status", data.device.status], ["Active screen", humanize(data.device.activeScreen)], ["Last check-in", formatDate(data.device.lastCheckIn)], ["Wi-Fi", `${data.device.wifiRssi} dBm`], ["Firmware", data.device.firmwareVersion]].map(([term, value]) => <div key={term} className="flex justify-between gap-4 border-b border-ink/5 pb-3"><dt className="text-ink/45">{term}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl></Card>
         </section> : null}
       </div>
