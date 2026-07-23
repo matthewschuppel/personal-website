@@ -31,7 +31,7 @@ import {
   type WestWallRotationScreen
 } from "@/data/westwall";
 
-const tabs = ["Overview", "Screens", "Flights", "Messages", "Data sources", "Settings"] as const;
+const tabs = ["Overview", "Scenes", "Alerts", "Screens", "Flights", "Messages", "Data sources", "Settings"] as const;
 type Tab = (typeof tabs)[number];
 type CalendarSyncState = { configured: boolean; scannedEvents: number; matchedFlights: number; syncedAt: string };
 
@@ -137,6 +137,7 @@ export function WestWallDisplayManager() {
   const orderedScreens = useMemo(() => [...data.rotation].sort((a, b) => a.priority - b.priority), [data.rotation]);
   const activeMessage = useMemo(() => data.messages.filter(isMessageActive).sort((a, b) => a.priority - b.priority)[0], [data.messages]);
   const previewScreen = orderedScreens.find((screen) => screen.enabled) ?? orderedScreens[0];
+  const latestCheckin = data.checkins[0];
   const previewLines = activeMessage
     ? [activeMessage.message, "Scheduled message", "Priority " + activeMessage.priority]
     : [previewScreen?.preview || "WestWall Ready", data.stocks.filter((stock) => stock.enabled).map((stock) => stock.symbol).join("  "), data.weatherLocations.find((location) => location.isDefault)?.name || "Dallas, TX"];
@@ -225,9 +226,33 @@ export function WestWallDisplayManager() {
     }, "Message changes saved.");
   }
 
-  async function remove(kind: "flights" | "messages" | "stocks" | "weather-locations" | "locations", id: string, label: string) {
+  async function remove(kind: "flights" | "messages" | "stocks" | "weather-locations" | "locations" | "scenes" | "alerts", id: string, label: string) {
     if (!window.confirm(`Remove ${label}?`)) return;
     await request(`/api/westwall/${kind}/${encodeURIComponent(id)}`, { method: "DELETE" }, `${label} removed.`);
+  }
+
+  async function addScene(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const saved = await request("/api/westwall/scenes", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...Object.fromEntries(values), enabled: true, days: [0, 1, 2, 3, 4, 5, 6], priority: data.scenes.length + 1 }) }, "Scene created.");
+    if (saved) form.reset();
+  }
+
+  async function saveScene(id: string, patch: Record<string, unknown>) {
+    await request(`/api/westwall/scenes/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }, "Scene updated.");
+  }
+
+  async function addAlert(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    const saved = await request("/api/westwall/alerts", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...Object.fromEntries(values), enabled: true, threshold: Number(values.get("threshold") || 0), leadMinutes: Number(values.get("leadMinutes") || 0), priority: data.alertRules.length + 1 }) }, "Alert rule created.");
+    if (saved) form.reset();
+  }
+
+  async function saveAlert(id: string, patch: Record<string, unknown>) {
+    await request(`/api/westwall/alerts/${encodeURIComponent(id)}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(patch) }, "Alert rule updated.");
   }
 
   async function saveAppearance(event: FormEvent<HTMLFormElement>) {
@@ -301,6 +326,8 @@ export function WestWallDisplayManager() {
               <button disabled={busy} onClick={() => void sendCommand("next_screen")} className={secondaryButton}>Next screen</button>
               <button disabled={busy} onClick={() => void sendCommand("toggle_pause")} className={secondaryButton}>Pause / resume</button>
               <button disabled={busy} onClick={() => void sendCommand("dismiss_alert")} className={secondaryButton}>Dismiss alert</button>
+              <button disabled={busy} onClick={() => void sendCommand("update_firmware")} className={secondaryButton}>Install firmware update</button>
+              <button disabled={busy} onClick={() => void sendCommand("rollback_firmware")} className={secondaryButton}>Rollback firmware</button>
               <button disabled={busy} onClick={() => void sendCommand("reboot")} className={secondaryButton}><CirclePower size={16} />Restart device</button>
             </div>
           </Card>
@@ -321,6 +348,34 @@ export function WestWallDisplayManager() {
           </Card>
           <Card title="Live feed health" description="WestWall keeps the last successful result available if a provider briefly drops out.">
             <div className="space-y-2">{(data.feedHealth ?? []).map((feed) => <div key={feed.key} className="flex items-center justify-between gap-4 rounded-xl bg-mist/60 px-4 py-3"><div><p className="font-semibold">{feed.label}</p><p className="mt-0.5 text-xs text-ink/45">{feed.detail}</p></div><span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase ${feed.status === "live" ? "bg-moss/10 text-moss" : feed.status === "cached" ? "bg-amber/15 text-ink" : "bg-clay/10 text-clay"}`}>{feed.status}</span></div>)}{!data.feedHealth?.length ? <p className="text-sm text-ink/50">Feed checks will appear after the next refresh.</p> : null}</div>
+          </Card>
+        </section> : null}
+
+        {activeTab === "Scenes" ? <section className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <Card title="Create a scene" description="Scenes become active by mode and schedule. Dual layouts only affect the 256×64 wall.">
+            <form onSubmit={addScene} className="grid gap-3">
+              <input required name="name" placeholder="Scene name · Flight day" className={fieldClass} />
+              <label className="text-xs font-semibold text-ink/45">LAYOUT<select name="layout" defaultValue="persistent-left" className={`${fieldClass} mt-1 w-full`}><option value="panoramic">Panoramic rotation</option><option value="dual">Two fixed zones</option><option value="persistent-left">Persistent left + rotating right</option></select></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">LEFT ZONE<select name="leftScreen" defaultValue="upcoming-flights" className={`${fieldClass} mt-1 w-full`}>{orderedScreens.map((screen) => <option key={screen.key} value={screen.key}>{screen.label}</option>)}</select></label><label className="text-xs font-semibold text-ink/45">RIGHT ZONE<select name="rightScreen" defaultValue="weather" className={`${fieldClass} mt-1 w-full`}>{orderedScreens.map((screen) => <option key={screen.key} value={screen.key}>{screen.label}</option>)}</select></label></div>
+              <label className="text-xs font-semibold text-ink/45">MODE<select name="operatingMode" defaultValue="Any" className={`${fieldClass} mt-1 w-full`}>{["Any", "Morning", "Workday", "Evening", "Travel", "Guest", "Night"].map((mode) => <option key={mode}>{mode}</option>)}</select></label>
+              <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">START<input name="startsAt" type="time" className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">END<input name="endsAt" type="time" className={`${fieldClass} mt-1 w-full`} /></label></div>
+              <button disabled={busy} className={primaryButton}><Plus size={16} />Create scene</button>
+            </form>
+          </Card>
+          <Card title="Scene composer" description="The first enabled matching scene controls the wall. Lower priority numbers win.">
+            <div className="space-y-3">{data.scenes.map((scene) => <article key={scene.id} className="rounded-2xl border border-ink/10 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-semibold">{scene.name}</h3><p className="mt-1 text-sm text-ink/50">{humanize(scene.layout)} · {scene.operatingMode} · priority {scene.priority}</p></div><div className="flex gap-2"><button disabled={busy} onClick={() => void saveScene(scene.id, { enabled: !scene.enabled })} className={secondaryButton}>{scene.enabled ? "Active" : "Paused"}</button><button onClick={() => void remove("scenes", scene.id, scene.name)} className="rounded-lg p-2 text-ink/35 hover:bg-clay/10 hover:text-clay"><Trash2 size={16} /></button></div></div>
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-xl bg-[#090b0c] p-3 font-mono text-[11px] uppercase text-white"><div className="rounded-lg border border-white/10 p-3"><p className="text-yellow-300">{humanize(scene.leftScreen)}</p><p className="mt-2 text-white/50">Persistent left zone</p></div><div className="rounded-lg border border-white/10 p-3"><p className="text-cyan-300">{humanize(scene.rightScreen)}</p><p className="mt-2 text-white/50">{scene.layout === "persistent-left" ? "Starts right rotation" : "Fixed right zone"}</p></div></div>
+            </article>)} </div>
+          </Card>
+        </section> : null}
+
+        {activeTab === "Alerts" ? <section className="mt-5 grid gap-4 lg:grid-cols-[0.8fr_1.2fr]">
+          <Card title="Create an alert rule" description="Rules can temporarily take over the full wall. Quiet hours suppress the selected rule.">
+            <form onSubmit={addAlert} className="grid gap-3"><input required name="name" placeholder="Rule name" className={fieldClass} /><label className="text-xs font-semibold text-ink/45">TRIGGER<select name="type" className={`${fieldClass} mt-1 w-full`}><option value="weather-severe">Severe weather</option><option value="weather-rain">Rain probability</option><option value="flight-soon">Flight departing soon</option><option value="aircraft-close">Aircraft within distance</option><option value="stock-move">Stock daily move</option></select></label><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">THRESHOLD<input name="threshold" type="number" step="0.1" defaultValue="2" className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">LEAD MINUTES<input name="leadMinutes" type="number" defaultValue="120" className={`${fieldClass} mt-1 w-full`} /></label></div><div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-ink/45">QUIET FROM<input name="quietStart" type="time" className={`${fieldClass} mt-1 w-full`} /></label><label className="text-xs font-semibold text-ink/45">QUIET UNTIL<input name="quietEnd" type="time" className={`${fieldClass} mt-1 w-full`} /></label></div><button disabled={busy} className={primaryButton}><Plus size={16} />Create rule</button></form>
+          </Card>
+          <Card title="Alert rules" description="Rules run in priority order; the first matching rule controls the takeover.">
+            <div className="space-y-3">{data.alertRules.map((rule) => <article key={rule.id} className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-ink/10 p-4"><div><p className="font-semibold">{rule.name}</p><p className="mt-1 text-sm text-ink/50">{humanize(rule.type)} · {rule.type === "flight-soon" ? `${rule.leadMinutes} minutes` : `threshold ${rule.threshold}`}{rule.quietStart ? ` · quiet ${rule.quietStart}–${rule.quietEnd}` : ""}</p></div><div className="flex gap-2"><button disabled={busy} onClick={() => void saveAlert(rule.id, { enabled: !rule.enabled })} className={secondaryButton}>{rule.enabled ? "Enabled" : "Paused"}</button><button onClick={() => void remove("alerts", rule.id, rule.name)} className="rounded-lg p-2 text-ink/35 hover:bg-clay/10 hover:text-clay"><Trash2 size={16} /></button></div></article>)}</div>
           </Card>
         </section> : null}
 
@@ -399,7 +454,7 @@ export function WestWallDisplayManager() {
               <button disabled={busy} className={`${primaryButton} sm:col-span-2`}><Save size={16} />Save and update wall</button>
             </form>
           </Card>
-          <Card title="Device details" description="Live telemetry from the physical Matrix Portal."><dl className="space-y-3 text-sm">{[["Name", data.device.name], ["Status", data.device.status], ["Active screen", humanize(data.device.activeScreen)], ["Last check-in", formatDate(data.device.lastCheckIn)], ["Wi-Fi", `${data.device.wifiRssi} dBm`], ["Firmware", data.device.firmwareVersion]].map(([term, value]) => <div key={term} className="flex justify-between gap-4 border-b border-ink/5 pb-3"><dt className="text-ink/45">{term}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl></Card>
+          <Card title="Device details" description="Live telemetry from the physical Matrix Portal. Hold the upper button while resetting to enter USB recovery mode."><dl className="space-y-3 text-sm">{[["Name", data.device.name], ["Status", data.device.status], ["Active screen", humanize(data.device.activeScreen)], ["Last check-in", formatDate(data.device.lastCheckIn)], ["Wi-Fi", `${data.device.wifiRssi} dBm`], ["Firmware", data.device.firmwareVersion], ["Uptime", latestCheckin ? `${Math.floor(latestCheckin.uptimeSeconds / 3600)}h ${Math.floor(latestCheckin.uptimeSeconds % 3600 / 60)}m` : "Waiting"], ["Free memory", latestCheckin ? `${Math.round(latestCheckin.freeMemoryBytes / 1024)} KB` : "Waiting"]].map(([term, value]) => <div key={term} className="flex justify-between gap-4 border-b border-ink/5 pb-3"><dt className="text-ink/45">{term}</dt><dd className="text-right font-semibold">{value}</dd></div>)}</dl></Card>
         </section> : null}
       </div>
     </main>

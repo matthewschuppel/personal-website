@@ -106,11 +106,37 @@ export type WestWallAppearanceSettings = {
 };
 
 export type WestWallFeedHealth = {
-  key: "calendar" | "weather" | "aircraft" | "markets";
+  key: "calendar" | "flights" | "weather" | "aircraft" | "markets";
   label: string;
   status: "live" | "cached" | "unavailable";
   updatedAt: string;
   detail: string;
+};
+
+export type WestWallScene = {
+  id: string;
+  name: string;
+  enabled: boolean;
+  layout: "panoramic" | "dual" | "persistent-left";
+  leftScreen: WestWallScreenKey;
+  rightScreen: WestWallScreenKey;
+  operatingMode: WestWallAppearanceSettings["operatingMode"] | "Any";
+  startsAt: string;
+  endsAt: string;
+  days: number[];
+  priority: number;
+};
+
+export type WestWallAlertRule = {
+  id: string;
+  name: string;
+  type: "weather-severe" | "weather-rain" | "flight-soon" | "aircraft-close" | "stock-move";
+  enabled: boolean;
+  threshold: number;
+  leadMinutes: number;
+  quietStart: string;
+  quietEnd: string;
+  priority: number;
 };
 
 export type WestWallCommandLog = {
@@ -153,6 +179,8 @@ export type WestWallDashboardData = {
   checkins: WestWallDeviceCheckin[];
   messages: WestWallCustomMessage[];
   feedHealth?: WestWallFeedHealth[];
+  scenes: WestWallScene[];
+  alertRules: WestWallAlertRule[];
 };
 
 export const mockWestWallDevice: WestWallDevice = {
@@ -249,6 +277,16 @@ export const mockWestWallCommands: WestWallCommandLog[] = [
   { id: "cmd-001", command: "test_pattern", status: "queued", createdAt: "Mock data" }
 ];
 
+export const mockWestWallScenes: WestWallScene[] = [
+  { id: "scene-default", name: "Panoramic rotation", enabled: true, layout: "panoramic", leftScreen: "upcoming-flights", rightScreen: "weather", operatingMode: "Any", startsAt: "", endsAt: "", days: [0, 1, 2, 3, 4, 5, 6], priority: 1 }
+];
+
+export const mockWestWallAlertRules: WestWallAlertRule[] = [
+  { id: "alert-weather", name: "Severe weather", type: "weather-severe", enabled: true, threshold: 1, leadMinutes: 0, quietStart: "", quietEnd: "", priority: 1 },
+  { id: "alert-flight", name: "Flight departing soon", type: "flight-soon", enabled: true, threshold: 0, leadMinutes: 120, quietStart: "", quietEnd: "", priority: 2 },
+  { id: "alert-aircraft", name: "Aircraft overhead", type: "aircraft-close", enabled: true, threshold: 2, leadMinutes: 0, quietStart: "23:00", quietEnd: "06:30", priority: 3 }
+];
+
 export const mockWestWallCheckins: WestWallDeviceCheckin[] = [
   { id: "checkin-001", firmwareVersion: "0.1.0-dev", wifiRssi: -58, uptimeSeconds: 0, freeMemoryBytes: 183500, currentScreen: "Weather", createdAt: "Mock data" }
 ];
@@ -275,5 +313,7 @@ export const mockWestWallData: WestWallDashboardData = {
   appearance: mockWestWallAppearance,
   commands: mockWestWallCommands,
   checkins: mockWestWallCheckins,
-  messages: mockWestWallMessages
+  messages: mockWestWallMessages,
+  scenes: mockWestWallScenes,
+  alertRules: mockWestWallAlertRules
 };

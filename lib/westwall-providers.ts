@@ -44,6 +44,17 @@ export type WeatherSnapshot = {
   hourly: Array<{ time: string; temperature: number; rainChance: number; icon: WeatherIcon }>;
 };
 
+export type LiveFlightUpdate = {
+  flightNumber: string;
+  status: string;
+  gate: string;
+  terminal: string;
+  estimatedDeparture: string;
+  estimatedArrival: string;
+  aircraftType: string;
+  tailNumber: string;
+};
+
 type OpenMeteoResponse = {
   current?: {
     temperature_2m?: number;
@@ -109,6 +120,7 @@ const providerHealth = new Map<WestWallFeedHealth["key"], WestWallFeedHealth>();
 
 const providerLabels: Record<WestWallFeedHealth["key"], string> = {
   calendar: "Apple Calendar",
+  flights: "Live flight status",
   weather: "Corinth weather",
   aircraft: "Aircraft over Corinth",
   markets: "Market prices"
@@ -137,7 +149,7 @@ async function cachedProvider<T>(key: WestWallFeedHealth["key"], cacheKey: strin
 }
 
 export function getWestWallProviderHealth(): WestWallFeedHealth[] {
-  return (["calendar", "weather", "aircraft", "markets"] as const).map((key) => providerHealth.get(key) ?? {
+  return (["calendar", "flights", "weather", "aircraft", "markets"] as const).map((key) => providerHealth.get(key) ?? {
     key,
     label: providerLabels[key],
     status: "unavailable",
@@ -148,6 +160,57 @@ export function getWestWallProviderHealth(): WestWallFeedHealth[] {
 
 export function setWestWallCalendarHealth(status: WestWallFeedHealth["status"], detail: string) {
   markHealth("calendar", status, new Date().toISOString(), detail);
+}
+
+type AeroApiFlight = {
+  ident?: string;
+  status?: string;
+  scheduled_out?: string;
+  estimated_out?: string;
+  estimated_in?: string;
+  actual_out?: string;
+  actual_in?: string;
+  gate_origin?: string;
+  terminal_origin?: string;
+  aircraft_type?: string;
+  registration?: string;
+  origin?: { code_iata?: string };
+  destination?: { code_iata?: string };
+};
+
+export async function getLiveFlightUpdatesFromProvider(flights: WestWallUpcomingFlight[]): Promise<Map<string, LiveFlightUpdate>> {
+  const apiKey = process.env.FLIGHTAWARE_AEROAPI_KEY;
+  if (!apiKey) {
+    markHealth("flights", "unavailable", "", "Add a FlightAware AeroAPI key to enable live gates and delays");
+    return new Map();
+  }
+  const updates = await cachedProvider("flights", `flights:${flights.map((flight) => `${flight.flightNumber}:${flight.departureTime}`).join(",")}`, async () => {
+    const entries = await Promise.all(flights.slice(0, 4).map(async (flight) => {
+      const ident = flight.flightNumber.replace(/\s+/g, "");
+      const response = await fetch(`https://aeroapi.flightaware.com/aeroapi/flights/${encodeURIComponent(ident)}?max_pages=1`, {
+        headers: { "x-apikey": apiKey, Accept: "application/json" },
+        next: { revalidate: 60 }
+      });
+      if (!response.ok) return null;
+      const payload = await response.json() as { flights?: AeroApiFlight[] };
+      const expected = Date.parse(flight.departureTime || "");
+      const candidates = (payload.flights ?? []).filter((item) => (!item.origin?.code_iata || item.origin.code_iata === flight.departureAirport) && (!item.destination?.code_iata || item.destination.code_iata === flight.arrivalAirport));
+      const match = candidates.sort((a, b) => Math.abs(Date.parse(a.scheduled_out || "") - expected) - Math.abs(Date.parse(b.scheduled_out || "") - expected))[0];
+      if (!match) return null;
+      return [flight.id, {
+        flightNumber: match.ident || flight.flightNumber,
+        status: match.status || flight.status,
+        gate: match.gate_origin || flight.gate,
+        terminal: match.terminal_origin || flight.terminal,
+        estimatedDeparture: match.actual_out || match.estimated_out || match.scheduled_out || flight.departureTime,
+        estimatedArrival: match.actual_in || match.estimated_in || flight.arrivalTime,
+        aircraftType: match.aircraft_type || "",
+        tailNumber: match.registration || ""
+      } satisfies LiveFlightUpdate] as const;
+    }));
+    return entries.filter((entry): entry is NonNullable<typeof entry> => Boolean(entry));
+  });
+  return new Map(updates);
 }
 
 const airlinePrefixes: Record<string, { name: string; code: string }> = {

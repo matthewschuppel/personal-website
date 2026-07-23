@@ -179,6 +179,49 @@ CREATE TABLE IF NOT EXISTS westwall_rotation_screens (
   FOREIGN KEY (device_id) REFERENCES westwall_devices(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS westwall_scenes (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  layout TEXT NOT NULL DEFAULT 'panoramic',
+  left_screen TEXT NOT NULL DEFAULT 'upcoming-flights',
+  right_screen TEXT NOT NULL DEFAULT 'weather',
+  operating_mode TEXT NOT NULL DEFAULT 'Any',
+  starts_at TEXT,
+  ends_at TEXT,
+  days TEXT NOT NULL DEFAULT '[0,1,2,3,4,5,6]',
+  priority INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES westwall_devices(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS westwall_alert_rules (
+  id TEXT PRIMARY KEY,
+  device_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  rule_type TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  threshold_value REAL NOT NULL DEFAULT 0,
+  lead_minutes INTEGER NOT NULL DEFAULT 0,
+  quiet_start TEXT,
+  quiet_end TEXT,
+  priority INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (device_id) REFERENCES westwall_devices(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS westwall_sync_state (
+  source TEXT PRIMARY KEY,
+  last_started_at TEXT,
+  last_completed_at TEXT,
+  last_status TEXT,
+  last_detail TEXT,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS westwall_upcoming_flights (
   id TEXT PRIMARY KEY,
   device_id TEXT NOT NULL,
@@ -326,6 +369,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_westwall_flights_calendar_event ON westwal
 CREATE INDEX IF NOT EXISTS idx_westwall_commands_device ON westwall_command_logs(device_id);
 CREATE INDEX IF NOT EXISTS idx_westwall_checkins_device ON westwall_device_checkins(device_id);
 CREATE INDEX IF NOT EXISTS idx_westwall_messages_device ON westwall_custom_messages(device_id);
+CREATE INDEX IF NOT EXISTS idx_westwall_scenes_device ON westwall_scenes(device_id);
+CREATE INDEX IF NOT EXISTS idx_westwall_alert_rules_device ON westwall_alert_rules(device_id);
 CREATE INDEX IF NOT EXISTS idx_dashboard_calendar_status ON dashboard_calendar_drafts(status);
 CREATE INDEX IF NOT EXISTS idx_dashboard_unified_items_type ON dashboard_unified_items(item_type);
 

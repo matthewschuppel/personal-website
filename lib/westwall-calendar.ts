@@ -1,6 +1,7 @@
 import { getAppleCalendarEvents, type CalendarEvent } from "@/lib/apple-calendar";
 import { pruneCalendarWestWallFlights, upsertCalendarWestWallFlight } from "@/lib/westwall-db";
 import type { WestWallUpcomingFlight } from "@/data/westwall";
+import { getD1Database } from "@/lib/d1";
 
 const AIRLINES: Record<string, string> = {
   AA: "American Airlines",
@@ -112,4 +113,25 @@ export async function syncWestWallFlightsFromCalendar({ refresh = false }: { ref
     syncedAt: new Date().toISOString(),
     flights
   };
+}
+
+export async function syncWestWallFlightsIfDue(intervalMinutes = 5) {
+  const db = getD1Database();
+  if (!db) return syncWestWallFlightsFromCalendar();
+  const state = await db.prepare("SELECT last_completed_at, last_status, last_detail FROM westwall_sync_state WHERE source = 'calendar'").first<{ last_completed_at: string | null; last_status: string | null; last_detail: string | null }>();
+  const lastCompleted = state?.last_completed_at ? Date.parse(`${state.last_completed_at.replace(" ", "T")}Z`) : 0;
+  if (lastCompleted && Date.now() - lastCompleted < intervalMinutes * 60_000) {
+    return { skipped: true, syncedAt: state?.last_completed_at ?? "", status: state?.last_status ?? "ok", detail: state?.last_detail ?? "" };
+  }
+  await db.prepare("INSERT INTO westwall_sync_state (source, last_started_at, last_status, last_detail) VALUES ('calendar', CURRENT_TIMESTAMP, 'running', 'Calendar refresh in progress') ON CONFLICT(source) DO UPDATE SET last_started_at = CURRENT_TIMESTAMP, last_status = 'running', last_detail = 'Calendar refresh in progress', updated_at = CURRENT_TIMESTAMP").run();
+  try {
+    const result = await syncWestWallFlightsFromCalendar();
+    const detail = `${result.matchedFlights} flight${result.matchedFlights === 1 ? "" : "s"} from ${result.scannedEvents} events`;
+    await db.prepare("UPDATE westwall_sync_state SET last_completed_at = CURRENT_TIMESTAMP, last_status = 'ok', last_detail = ?, updated_at = CURRENT_TIMESTAMP WHERE source = 'calendar'").bind(detail).run();
+    return { ...result, skipped: false };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : "Calendar refresh failed";
+    await db.prepare("UPDATE westwall_sync_state SET last_completed_at = CURRENT_TIMESTAMP, last_status = 'error', last_detail = ?, updated_at = CURRENT_TIMESTAMP WHERE source = 'calendar'").bind(detail).run();
+    throw error;
+  }
 }

@@ -6,6 +6,8 @@ import {
   mockWestWallFlights,
   mockWestWallLocations,
   mockWestWallMessages,
+  mockWestWallScenes,
+  mockWestWallAlertRules,
   mockWestWallRotation,
   mockWestWallStocks,
   mockWestWallWeatherLocations,
@@ -19,12 +21,15 @@ import {
   type WestWallSavedLocation,
   type WestWallStockTicker,
   type WestWallUpcomingFlight,
-  type WestWallWeatherLocation
+  type WestWallWeatherLocation,
+  type WestWallScene,
+  type WestWallAlertRule
 } from "@/data/westwall";
 import { createId, getD1Database } from "@/lib/d1";
 import { getAppleCalendarEvents, type CalendarEvent } from "@/lib/apple-calendar";
 import {
   getNearbyAircraftFromProvider,
+  getLiveFlightUpdatesFromProvider,
   getStockQuotesFromProvider,
   getWeatherFromProvider,
   getWestWallProviderHealth,
@@ -158,6 +163,32 @@ type MessageRow = {
   enabled: number;
   starts_at: string | null;
   ends_at: string | null;
+  priority: number;
+};
+
+type SceneRow = {
+  id: string;
+  name: string;
+  enabled: number;
+  layout: WestWallScene["layout"];
+  left_screen: WestWallScene["leftScreen"];
+  right_screen: WestWallScene["rightScreen"];
+  operating_mode: WestWallScene["operatingMode"];
+  starts_at: string | null;
+  ends_at: string | null;
+  days: string;
+  priority: number;
+};
+
+type AlertRuleRow = {
+  id: string;
+  name: string;
+  rule_type: WestWallAlertRule["type"];
+  enabled: number;
+  threshold_value: number;
+  lead_minutes: number;
+  quiet_start: string | null;
+  quiet_end: string | null;
   priority: number;
 };
 
@@ -317,6 +348,43 @@ function toMessage(row: MessageRow): WestWallCustomMessage {
   };
 }
 
+function toScene(row: SceneRow): WestWallScene {
+  let days: number[] = [0, 1, 2, 3, 4, 5, 6];
+  try {
+    const parsed = JSON.parse(row.days);
+    if (Array.isArray(parsed)) days = parsed.map(Number).filter((day) => day >= 0 && day <= 6);
+  } catch {
+    // Use every day when an older row has malformed schedule data.
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    enabled: Boolean(row.enabled),
+    layout: row.layout,
+    leftScreen: row.left_screen,
+    rightScreen: row.right_screen,
+    operatingMode: row.operating_mode,
+    startsAt: row.starts_at ?? "",
+    endsAt: row.ends_at ?? "",
+    days,
+    priority: row.priority
+  };
+}
+
+function toAlertRule(row: AlertRuleRow): WestWallAlertRule {
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.rule_type,
+    enabled: Boolean(row.enabled),
+    threshold: row.threshold_value,
+    leadMinutes: row.lead_minutes,
+    quietStart: row.quiet_start ?? "",
+    quietEnd: row.quiet_end ?? "",
+    priority: row.priority
+  };
+}
+
 export async function ensureWestWallSeeded() {
   const db = getDbOrNull();
 
@@ -366,6 +434,14 @@ export async function ensureWestWallSeeded() {
   for (const message of mockWestWallMessages) {
     await createWestWallMessage(message);
   }
+
+  for (const scene of mockWestWallScenes) {
+    await createWestWallScene(scene);
+  }
+
+  for (const rule of mockWestWallAlertRules) {
+    await createWestWallAlertRule(rule);
+  }
 }
 
 export async function getWestWallDashboardData(): Promise<WestWallDashboardData> {
@@ -386,6 +462,8 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
     const { results: commandRows = [] } = await db.prepare("SELECT id, command, payload, status, created_at FROM westwall_command_logs WHERE device_id = ? ORDER BY created_at DESC LIMIT 10").bind(DEFAULT_DEVICE_ID).all<CommandRow>();
     const { results: checkinRows = [] } = await db.prepare("SELECT id, firmware_version, wifi_rssi, uptime_seconds, free_memory_bytes, current_screen, created_at FROM westwall_device_checkins WHERE device_id = ? ORDER BY created_at DESC LIMIT 10").bind(DEFAULT_DEVICE_ID).all<CheckinRow>();
     const { results: messageRows = [] } = await db.prepare("SELECT id, title, message, enabled, starts_at, ends_at, priority FROM westwall_custom_messages WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<MessageRow>();
+    const { results: sceneRows = [] } = await db.prepare("SELECT id, name, enabled, layout, left_screen, right_screen, operating_mode, starts_at, ends_at, days, priority FROM westwall_scenes WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<SceneRow>();
+    const { results: alertRuleRows = [] } = await db.prepare("SELECT id, name, rule_type, enabled, threshold_value, lead_minutes, quiet_start, quiet_end, priority FROM westwall_alert_rules WHERE device_id = ? ORDER BY priority ASC").bind(DEFAULT_DEVICE_ID).all<AlertRuleRow>();
 
     return {
       device: deviceRow ? toDevice(deviceRow) : mockWestWallDevice,
@@ -397,7 +475,9 @@ export async function getWestWallDashboardData(): Promise<WestWallDashboardData>
       appearance: settingsRow ? toAppearance(settingsRow) : mockWestWallAppearance,
       commands: commandRows.length ? commandRows.map(toCommand) : mockWestWallCommands,
       checkins: checkinRows.length ? checkinRows.map(toCheckin) : mockWestWallData.checkins,
-      messages: messageRows.map(toMessage)
+      messages: messageRows.map(toMessage),
+      scenes: sceneRows.length ? sceneRows.map(toScene) : mockWestWallScenes,
+      alertRules: alertRuleRows.length ? alertRuleRows.map(toAlertRule) : mockWestWallAlertRules
     };
   } catch {
     return mockWestWallData;
@@ -687,6 +767,82 @@ export async function deleteWestWallMessage(id: string) {
   return true;
 }
 
+export async function createWestWallScene(input: Partial<WestWallScene>) {
+  const db = getDbOrNull();
+  const scene: WestWallScene = {
+    id: input.id ?? createId("westwall-scene"),
+    name: input.name?.trim() || "New scene",
+    enabled: input.enabled ?? true,
+    layout: input.layout ?? "panoramic",
+    leftScreen: input.leftScreen ?? "upcoming-flights",
+    rightScreen: input.rightScreen ?? "weather",
+    operatingMode: input.operatingMode ?? "Any",
+    startsAt: input.startsAt ?? "",
+    endsAt: input.endsAt ?? "",
+    days: input.days?.map(Number) ?? [0, 1, 2, 3, 4, 5, 6],
+    priority: Number(input.priority ?? 10)
+  };
+  if (db) {
+    await db.prepare("INSERT INTO westwall_scenes (id, device_id, name, enabled, layout, left_screen, right_screen, operating_mode, starts_at, ends_at, days, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(scene.id, DEFAULT_DEVICE_ID, scene.name, bool(scene.enabled), scene.layout, scene.leftScreen, scene.rightScreen, scene.operatingMode, scene.startsAt || null, scene.endsAt || null, JSON.stringify(scene.days), scene.priority).run();
+  }
+  return scene;
+}
+
+export async function updateWestWallScene(id: string, input: Partial<WestWallScene>) {
+  const db = getDbOrNull();
+  if (!db) return null;
+  const current = await db.prepare("SELECT id, name, enabled, layout, left_screen, right_screen, operating_mode, starts_at, ends_at, days, priority FROM westwall_scenes WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).first<SceneRow>();
+  if (!current) return null;
+  const scene = { ...toScene(current), ...input, id };
+  await db.prepare("UPDATE westwall_scenes SET name = ?, enabled = ?, layout = ?, left_screen = ?, right_screen = ?, operating_mode = ?, starts_at = ?, ends_at = ?, days = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND device_id = ?")
+    .bind(scene.name, bool(scene.enabled), scene.layout, scene.leftScreen, scene.rightScreen, scene.operatingMode, scene.startsAt || null, scene.endsAt || null, JSON.stringify(scene.days), Number(scene.priority), id, DEFAULT_DEVICE_ID).run();
+  return scene;
+}
+
+export async function deleteWestWallScene(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_scenes WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
+}
+
+export async function createWestWallAlertRule(input: Partial<WestWallAlertRule>) {
+  const db = getDbOrNull();
+  const rule: WestWallAlertRule = {
+    id: input.id ?? createId("westwall-alert"),
+    name: input.name?.trim() || "New alert",
+    type: input.type ?? "weather-severe",
+    enabled: input.enabled ?? true,
+    threshold: Number(input.threshold ?? 0),
+    leadMinutes: Number(input.leadMinutes ?? 0),
+    quietStart: input.quietStart ?? "",
+    quietEnd: input.quietEnd ?? "",
+    priority: Number(input.priority ?? 10)
+  };
+  if (db) {
+    await db.prepare("INSERT INTO westwall_alert_rules (id, device_id, name, rule_type, enabled, threshold_value, lead_minutes, quiet_start, quiet_end, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(rule.id, DEFAULT_DEVICE_ID, rule.name, rule.type, bool(rule.enabled), rule.threshold, rule.leadMinutes, rule.quietStart || null, rule.quietEnd || null, rule.priority).run();
+  }
+  return rule;
+}
+
+export async function updateWestWallAlertRule(id: string, input: Partial<WestWallAlertRule>) {
+  const db = getDbOrNull();
+  if (!db) return null;
+  const current = await db.prepare("SELECT id, name, rule_type, enabled, threshold_value, lead_minutes, quiet_start, quiet_end, priority FROM westwall_alert_rules WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).first<AlertRuleRow>();
+  if (!current) return null;
+  const rule = { ...toAlertRule(current), ...input, id };
+  await db.prepare("UPDATE westwall_alert_rules SET name = ?, rule_type = ?, enabled = ?, threshold_value = ?, lead_minutes = ?, quiet_start = ?, quiet_end = ?, priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND device_id = ?")
+    .bind(rule.name, rule.type, bool(rule.enabled), Number(rule.threshold), Number(rule.leadMinutes), rule.quietStart || null, rule.quietEnd || null, Number(rule.priority), id, DEFAULT_DEVICE_ID).run();
+  return rule;
+}
+
+export async function deleteWestWallAlertRule(id: string) {
+  const db = getDbOrNull();
+  if (db) await db.prepare("DELETE FROM westwall_alert_rules WHERE id = ? AND device_id = ?").bind(id, DEFAULT_DEVICE_ID).run();
+  return true;
+}
+
 export async function recordWestWallCheckin(input: Partial<WestWallDeviceCheckin>) {
   const db = getDbOrNull();
   const checkin: WestWallDeviceCheckin = {
@@ -815,14 +971,26 @@ export async function buildWestWallCurrentPayload() {
   let weather: WeatherSnapshot | null = null;
   let nearbyAircraft: NearbyAircraft[] = [];
   let stockQuotes: StockQuote[] = [];
-  const [weatherResult, aircraftResult, stockResult] = await Promise.allSettled([
+  const [weatherResult, aircraftResult, stockResult, flightResult] = await Promise.allSettled([
     defaultWeather ? getWeatherFromProvider(defaultWeather, data.appearance.units) : Promise.resolve(null),
     defaultAircraftLocation ? getNearbyAircraftFromProvider(defaultAircraftLocation) : Promise.resolve([]),
-    enabledStocks.length ? getStockQuotesFromProvider(enabledStocks) : Promise.resolve([])
+    enabledStocks.length ? getStockQuotesFromProvider(enabledStocks) : Promise.resolve([]),
+    upcomingFlights.length ? getLiveFlightUpdatesFromProvider(upcomingFlights) : Promise.resolve(new Map())
   ]);
   if (weatherResult.status === "fulfilled") weather = weatherResult.value;
   if (aircraftResult.status === "fulfilled") nearbyAircraft = aircraftResult.value;
   if (stockResult.status === "fulfilled") stockQuotes = stockResult.value;
+  if (flightResult.status === "fulfilled") {
+    for (const flight of upcomingFlights) {
+      const update = flightResult.value.get(flight.id);
+      if (!update) continue;
+      flight.status = update.status;
+      flight.gate = update.gate;
+      flight.terminal = update.terminal;
+      flight.departureTime = update.estimatedDeparture || flight.departureTime;
+      flight.arrivalTime = update.estimatedArrival || flight.arrivalTime;
+    }
+  }
   const chicagoNow = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Chicago" }));
   const hour = chicagoNow.getHours();
   const timeFormatter = new Intl.DateTimeFormat("en-US", { timeZone: "America/Chicago", weekday: "short", hour: "numeric", minute: "2-digit" });
@@ -947,7 +1115,7 @@ export async function buildWestWallCurrentPayload() {
 
   const profileOrder = modeOrder[resolvedMode as Exclude<typeof resolvedMode, "Auto">] ?? modeOrder.Workday;
   const enabledScreens = data.rotation.filter((screen) => screen.enabled).sort((a, b) => profileOrder.indexOf(a.key) - profileOrder.indexOf(b.key));
-  const playlist = (scheduledMessage
+  const basePlaylist = (scheduledMessage
     ? [data.rotation.find((screen) => screen.key === "custom-message") ?? { id: "scheduled", key: "custom-message" as const, label: scheduledMessage.title, enabled: true, durationSeconds: 30, priority: 0, preview: scheduledMessage.message }]
     : enabledScreens
   ).map((screen) => {
@@ -962,16 +1130,62 @@ export async function buildWestWallCurrentPayload() {
     };
   });
 
+  const localTime = `${String(hour).padStart(2, "0")}:${String(chicagoNow.getMinutes()).padStart(2, "0")}`;
+  function isTimeActive(startsAt: string, endsAt: string) {
+    if (!startsAt && !endsAt) return true;
+    if (startsAt && endsAt && startsAt > endsAt) return localTime >= startsAt || localTime < endsAt;
+    return (!startsAt || localTime >= startsAt) && (!endsAt || localTime < endsAt);
+  }
+  const activeScene = data.scenes
+    .filter((scene) => scene.enabled)
+    .filter((scene) => scene.operatingMode === "Any" || scene.operatingMode === resolvedMode)
+    .filter((scene) => scene.days.includes(chicagoNow.getDay()))
+    .filter((scene) => isTimeActive(scene.startsAt, scene.endsAt))
+    .sort((a, b) => a.priority - b.priority)[0];
+
+  function itemForScreen(key: WestWallRotationScreen["key"]) {
+    const screen = data.rotation.find((candidate) => candidate.key === key) ?? { id: key, key, label: key, enabled: true, durationSeconds: 15, priority: 99, preview: "" };
+    const content = screenContent(screen);
+    return { screen: key, label: displayLabel(screen), lines: content.lines, icon: content.icon, symbol: content.symbol, duration: Math.max(5, screen.durationSeconds) };
+  }
+
+  type PayloadItem = Omit<(typeof basePlaylist)[number], "screen"> & { screen: string; layout?: string; scene?: string; zones?: Array<{ screen: string; label: string; lines: string[]; icon: string; symbol: string }> };
+  let playlist: PayloadItem[] = basePlaylist;
+  if (!scheduledMessage && data.appearance.displayWidth === 256 && activeScene && activeScene.layout !== "panoramic") {
+    const left = itemForScreen(activeScene.leftScreen);
+    const right = itemForScreen(activeScene.rightScreen);
+    const zone = (item: typeof left) => ({ screen: item.screen, label: item.label, lines: item.lines.slice(0, 4), icon: item.icon, symbol: item.symbol });
+    if (activeScene.layout === "dual") {
+      playlist = [{ ...left, screen: `scene-${activeScene.id}`, label: activeScene.name, layout: "dual", scene: activeScene.name, zones: [zone(left), zone(right)], duration: Math.max(left.duration, right.duration) }];
+    } else {
+      const rotating = basePlaylist.filter((item) => item.screen !== left.screen);
+      playlist = (rotating.length ? rotating : [right]).map((item) => ({ ...item, layout: "dual", scene: activeScene.name, zones: [zone(left), zone(item)] }));
+    }
+  }
+
   const active = playlist[0] ?? { screen: "clock", label: "Clock", lines: [timeFormatter.format(new Date())], icon: "clock", symbol: "", duration: 30 };
 
   let takeover: { id: string; label: string; lines: string[]; icon: string; symbol: string; duration: number } | null = null;
-  if (data.appearance.alertsEnabled && weather?.severeAlert) {
-    takeover = { id: `weather:${weather.alertHeadline || weather.conditions}`, label: "WEATHER ALERT", lines: [weather.alertHeadline || weather.conditions, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.wind}`, "PRESS A BUTTON TO DISMISS"], icon: "storm", symbol: "!", duration: 30 };
-  } else if (data.appearance.alertsEnabled && minutesToFlight >= 0 && minutesToFlight <= 120 && nextFlight) {
-    takeover = { id: `flight:${nextFlight.id}:${nextFlight.departureTime}`, label: "FLIGHT SOON", lines: [compactFlight(nextFlight), `DEPARTS IN ${minutesToFlight} MIN`, nextFlight.gate ? `GATE ${nextFlight.gate} ${nextFlight.terminal ? `TERMINAL ${nextFlight.terminal}` : ""}` : "CHECK AIRLINE FOR GATE"], icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), duration: 25 };
-  } else if (data.appearance.alertsEnabled && nearbyAircraft[0]?.distanceMiles <= 2) {
-    const aircraft = nearbyAircraft[0];
-    takeover = { id: `aircraft:${aircraft.callsign}:${Math.round(aircraft.distanceMiles)}`, label: "AIRCRAFT OVERHEAD", lines: [`${aircraft.callsign} ${aircraft.aircraftType}`, `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing}`, `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`], icon: airlineIcon(aircraft.carrierCode), symbol: aircraft.carrierCode, duration: 18 };
+  function ruleIsQuiet(rule: WestWallAlertRule) {
+    return !isTimeActive(rule.quietEnd, rule.quietStart);
+  }
+  if (data.appearance.alertsEnabled) {
+    for (const rule of data.alertRules.filter((candidate) => candidate.enabled && !ruleIsQuiet(candidate)).sort((a, b) => a.priority - b.priority)) {
+      if (rule.type === "weather-severe" && weather?.severeAlert) {
+        takeover = { id: `weather:${weather.alertHeadline || weather.conditions}`, label: rule.name.toUpperCase(), lines: [weather.alertHeadline || weather.conditions, `${weather.temperature}${data.appearance.units === "imperial" ? "F" : "C"} ${weather.wind}`, "PRESS A BUTTON TO DISMISS"], icon: "storm", symbol: "!", duration: 30 };
+      } else if (rule.type === "weather-rain" && weather && weather.rainChance >= rule.threshold) {
+        takeover = { id: `rain:${weather.rainChance}`, label: rule.name.toUpperCase(), lines: [`RAIN CHANCE ${weather.rainChance}%`, weather.conditions, `WIND ${weather.wind}`], icon: "rain", symbol: `${weather.rainChance}`, duration: 20 };
+      } else if (rule.type === "flight-soon" && nextFlight && minutesToFlight >= 0 && minutesToFlight <= Math.max(1, rule.leadMinutes)) {
+        takeover = { id: `flight:${nextFlight.id}:${nextFlight.departureTime}`, label: rule.name.toUpperCase(), lines: [compactFlight(nextFlight), `DEPARTS IN ${minutesToFlight} MIN`, nextFlight.gate ? `GATE ${nextFlight.gate} ${nextFlight.terminal ? `TERMINAL ${nextFlight.terminal}` : ""}` : "CHECK AIRLINE FOR GATE"], icon: airlineIcon(airlineSymbol(nextFlight)), symbol: airlineSymbol(nextFlight), duration: 25 };
+      } else if (rule.type === "aircraft-close" && nearbyAircraft[0] && nearbyAircraft[0].distanceMiles <= Math.max(0.1, rule.threshold)) {
+        const aircraft = nearbyAircraft[0];
+        takeover = { id: `aircraft:${aircraft.callsign}:${Math.round(aircraft.distanceMiles)}`, label: rule.name.toUpperCase(), lines: [`${aircraft.callsign} ${aircraft.aircraftType}`, `${aircraft.distanceMiles.toFixed(1)} MI ${aircraft.bearing}`, `${aircraft.altitudeFeet.toLocaleString("en-US")} FT ${aircraft.groundSpeedKnots} KT`], icon: airlineIcon(aircraft.carrierCode), symbol: aircraft.carrierCode, duration: 18 };
+      } else if (rule.type === "stock-move") {
+        const mover = stockQuotes.find((quote) => Math.abs(quote.percentChange) >= Math.max(0.1, rule.threshold));
+        if (mover) takeover = { id: `stock:${mover.symbol}:${mover.percentChange.toFixed(1)}`, label: rule.name.toUpperCase(), lines: [`${mover.symbol} $${price(mover.price)}`, `${mover.percentChange >= 0 ? "+" : ""}${mover.percentChange.toFixed(2)}% TODAY`, mover.trend], icon: "chart", symbol: mover.symbol.slice(0, 3), duration: 18 };
+      }
+      if (takeover) break;
+    }
   }
 
   const feedHealth = getWestWallProviderHealth();
@@ -984,6 +1198,9 @@ export async function buildWestWallCurrentPayload() {
     icon: active.icon,
     symbol: active.symbol,
     playlist,
+    layout: active.layout ?? "panoramic",
+    scene: active.scene ?? activeScene?.name ?? "Automatic rotation",
+    zones: active.zones ?? [],
     takeover,
     displayWidth: data.appearance.displayWidth,
     configuredMode: data.appearance.operatingMode,
