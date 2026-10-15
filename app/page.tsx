@@ -8,15 +8,15 @@ const interests = ["Biomedical technology", "Photography", "Travel", "Home syste
 const focusAreas = [
   {
     title: "Clinical technology",
-    text: "Work at the intersection of technical systems, clinical workflows, and clear execution."
+    text: "Support implantable and robotic neurosurgical devices in clinical trials and operating rooms."
   },
   {
-    title: "Operational systems",
-    text: "A practical bias toward organized information, repeatable processes, and documentation."
+    title: "Clinical site activation",
+    text: "Activated and onboarded 20+ U.S. sites, with training for neurosurgeons, nurses, oncologists, and clinical staff."
   },
   {
-    title: "Personal projects",
-    text: "Photography, travel planning, useful AI workflows, and calm digital tools for everyday life."
+    title: "Nationwide field support",
+    text: "Independently coordinate on-site and remote support, troubleshoot devices, and keep clinical teams moving."
   }
 ];
 
@@ -31,8 +31,9 @@ export default function Home() {
           </h1>
           <p className="mt-5 max-w-2xl text-2xl leading-9 text-ink/70">{siteConfig.title}</p>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/68">
-            A biomedical engineer focused on practical systems, thoughtful execution, and clear
-            communication across clinical, technical, and operational work.
+            I’m a biomedical engineer and clinical application specialist with 4+ years of
+            experience supporting neurosurgical devices. I help clinical teams launch new sites,
+            learn device workflows, and resolve technical challenges across the U.S.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -87,11 +88,12 @@ export default function Home() {
 
       <section className="mx-auto grid max-w-7xl gap-6 px-5 py-12 md:grid-cols-[1.2fr_0.8fr]">
         <article className="rounded-lg border border-ink/10 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-ink">About This Site</h2>
+          <h2 className="text-xl font-semibold text-ink">Engineering in clinical practice</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/65">
-            This public site is intentionally simple: a concise professional presence, a resume,
-            selected photos, and a direct contact path. The private dashboard lives separately in
-            MatthewOS.
+            At Carthera, I support clinical site activation, device training, and ongoing trial
+            procedures. Previously, I supported neurosurgical robotics at Renishaw Healthcare.
+            Across both roles, my work connects hands-on technical support with the needs of
+            surgical teams.
           </p>
         </article>
         <article className="rounded-lg border border-ink/10 bg-white p-6 shadow-sm">

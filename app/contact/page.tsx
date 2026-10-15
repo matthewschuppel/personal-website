@@ -4,7 +4,8 @@ import { PageShell } from "@/components/PageShell";
 import { siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
-  title: "Contact"
+  title: "Contact",
+  description: "Contact Matthew Schuppel about biomedical engineering, clinical applications, and medical device support opportunities."
 };
 
 export default function ContactPage() {
@@ -14,8 +15,8 @@ export default function ContactPage() {
         <section className="surface rounded-lg p-6">
           <h2 className="text-xl font-semibold text-ink">Reach out</h2>
           <p className="mt-3 text-sm leading-6 text-ink/62">
-            Email is the most reliable way to start a conversation. The form below opens your email
-            app with a draft instead of sending anything through a backend service.
+            Get in touch about biomedical engineering, clinical applications, or medical device
+            support opportunities. Use the form to open a draft in your email app.
           </p>
           <div className="mt-6 space-y-4 text-ink/70">
             <p className="flex items-center gap-3">
@@ -24,7 +25,7 @@ export default function ContactPage() {
             </p>
             <p className="flex items-center gap-3">
               <Phone size={18} className="text-clay" aria-hidden="true" />
-              {siteConfig.phone}
+              <a href="tel:+12695688014">{siteConfig.phone}</a>
             </p>
             <p className="flex items-center gap-3">
               <MapPin size={18} className="text-clay" aria-hidden="true" />
@@ -41,16 +42,22 @@ export default function ContactPage() {
             {/* Future email integration: connect this form to Resend, SendGrid, Mailgun, or a Cloudflare Worker email flow. */}
             <input
               className="rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              aria-label="Your name"
+              autoComplete="name"
               placeholder="Your name"
               name="name"
             />
             <input
               className="rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              type="email"
+              aria-label="Your email"
+              autoComplete="email"
               placeholder="Your email"
               name="email"
             />
             <textarea
               className="min-h-28 rounded-md border border-ink/10 bg-white px-4 py-3 text-sm outline-none transition focus:border-clay focus:ring-4 focus:ring-clay/10"
+              aria-label="Message"
               placeholder="Message"
               name="message"
             />
@@ -64,7 +71,10 @@ export default function ContactPage() {
           </form>
         </section>
         <section className="rounded-lg border border-ink/10 bg-ink p-6 text-paper shadow-crisp">
-          <h2 className="text-xl font-semibold">Profiles</h2>
+          <h2 className="text-xl font-semibold">Let’s connect</h2>
+          <p className="mt-4 text-sm leading-7 text-paper/75">
+            Based in {siteConfig.location}. {siteConfig.availability}
+          </p>
           <div className="mt-6 grid gap-3">
             {siteConfig.socials.map((social) => (
               <a

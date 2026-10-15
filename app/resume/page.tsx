@@ -4,20 +4,24 @@ import { PageShell } from "@/components/PageShell";
 import { resume, siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
-  title: "Resume"
+  title: "Resume",
+  description: "Matthew Schuppel’s experience in clinical site activation, neurosurgical devices, clinician training, and nationwide technical support."
 };
 
 export default function ResumePage() {
   return (
-    <PageShell eyebrow="Resume" title="Experience, skills, education, and selected highlights.">
+    <PageShell eyebrow="Resume" title="Clinical experience. Technical expertise.">
       <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
           <section className="surface rounded-lg p-6">
             <h2 className="text-lg font-semibold text-ink">{siteConfig.name}</h2>
             <p className="mt-2 text-sm font-medium text-clay">{siteConfig.title}</p>
+            <p className="mt-3 text-sm text-ink/65">{siteConfig.location}</p>
+            <p className="mt-3 text-sm leading-6 text-ink/65">{siteConfig.availability}</p>
             <div className="mt-5 grid gap-3">
               <a
-                href="/Matthew-Schuppel-Resume.pdf"
+                href={siteConfig.resumeUrl}
+                download="Matthew-Schuppel-Resume.pdf"
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper hover:-translate-y-0.5 hover:bg-moss"
               >
                 <Download size={16} aria-hidden="true" />
@@ -34,7 +38,7 @@ export default function ResumePage() {
           </section>
 
           <section className="surface rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-ink">Skills</h2>
+            <h2 className="text-lg font-semibold text-ink">Technical &amp; Clinical Skills</h2>
             <div className="mt-4 flex flex-wrap gap-2">
               {resume.skills.map((skill) => (
                 <span key={skill} className="rounded-md bg-mist px-3 py-2 text-sm font-medium text-ink/75">
@@ -58,6 +62,10 @@ export default function ResumePage() {
 
         <div className="space-y-6">
           <section className="surface rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-ink">Professional Summary</h2>
+            <p className="mt-4 leading-7 text-ink/70">{resume.summary}</p>
+          </section>
+          <section className="surface rounded-lg p-6">
             <h2 className="text-lg font-semibold text-ink">Professional Highlights</h2>
             <ul className="mt-4 grid gap-3 text-ink/70 md:grid-cols-2">
               {resume.highlights.map((highlight) => (
@@ -79,20 +87,15 @@ export default function ResumePage() {
                   <p className="rounded-md bg-mist px-3 py-2 text-sm font-semibold text-ink/65">{item.years}</p>
                 </div>
                 <p className="mt-4 leading-7 text-ink/70">{item.description}</p>
+                <ul className="mt-4 list-disc space-y-3 pl-5 text-sm leading-7 text-ink/70 marker:text-clay">
+                  {item.bullets.map((bullet) => (
+                    <li key={bullet}>{bullet}</li>
+                  ))}
+                </ul>
               </article>
             ))}
           </section>
 
-          <section className="surface rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-ink">Certifications & Focus Areas</h2>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {["Clinical support", "Training documentation", "Process design", "AI-enabled workflows"].map((item) => (
-                <p key={item} className="rounded-md bg-mist px-3 py-2 text-sm font-medium text-ink/70">
-                  {item}
-                </p>
-              ))}
-            </div>
-          </section>
         </div>
       </div>
     </PageShell>
