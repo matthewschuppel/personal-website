@@ -439,13 +439,6 @@ export const mockGalleryItems: MockGalleryItem[] = [
     image: "/images/hero-workspace.png"
   },
   {
-    id: "gallery-003",
-    album: "Wedding",
-    title: "Wedding moments",
-    location: "Private placeholders",
-    image: "/images/hero-workspace.png"
-  },
-  {
     id: "gallery-004",
     album: "Projects",
     title: "Project visuals",
