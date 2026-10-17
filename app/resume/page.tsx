@@ -5,12 +5,12 @@ import { resume, siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
   title: "Resume",
-  description: "Matthew Schuppel’s experience in clinical site activation, neurosurgical devices, clinician training, and nationwide technical support."
+  description: "Matthew Schuppel’s experience in clinical operations, employee onboarding, peer training, project ownership, and nationwide medical device support."
 };
 
 export default function ResumePage() {
   return (
-    <PageShell eyebrow="Resume" title="Clinical experience. Technical expertise.">
+    <PageShell eyebrow="Resume" title="Clinical operations and team development.">
       <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
           <section className="surface rounded-lg p-6">
@@ -38,12 +38,19 @@ export default function ResumePage() {
           </section>
 
           <section className="surface rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-ink">Technical &amp; Clinical Skills</h2>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {resume.skills.map((skill) => (
-                <span key={skill} className="rounded-md bg-mist px-3 py-2 text-sm font-medium text-ink/75">
-                  {skill}
-                </span>
+            <h2 className="text-lg font-semibold text-ink">Leadership &amp; Operational Skills</h2>
+            <div className="mt-4 space-y-5">
+              {resume.skillGroups.map((group) => (
+                <div key={group.label}>
+                  <h3 className="text-sm font-semibold text-clay">{group.label}</h3>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.skills.map((skill) => (
+                      <span key={skill} className="rounded-md bg-mist px-3 py-2 text-sm font-medium text-ink/75">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
               ))}
             </div>
           </section>

@@ -7,16 +7,16 @@ const interests = ["Biomedical technology", "Photography", "Travel", "Home syste
 
 const focusAreas = [
   {
-    title: "Clinical technology",
-    text: "Support implantable and robotic neurosurgical devices in clinical trials and operating rooms."
+    title: "Onboarding & team training",
+    text: "Developed employee onboarding plans and trained new team members and clinical staff at two companies."
   },
   {
     title: "Clinical site activation",
     text: "Activated and onboarded 20+ U.S. sites, with training for neurosurgeons, nurses, oncologists, and clinical staff."
   },
   {
-    title: "Nationwide field support",
-    text: "Independently coordinate on-site and remote support, troubleshoot devices, and keep clinical teams moving."
+    title: "Project ownership",
+    text: "Identify operational needs and create training procedures and internal tools for team coordination and clinical trial logistics."
   }
 ];
 
@@ -31,9 +31,9 @@ export default function Home() {
           </h1>
           <p className="mt-5 max-w-2xl text-2xl leading-9 text-ink/70">{siteConfig.title}</p>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/68">
-            I’m a biomedical engineer and clinical application specialist with 4+ years of
-            experience supporting neurosurgical devices. I help clinical teams launch new sites,
-            learn device workflows, and resolve technical challenges across the U.S.
+            I’m a biomedical engineer with 4+ years of experience in medical devices and
+            clinical site operations. I develop onboarding plans, train teams, and take ownership
+            of the projects and support that help clinical sites operate consistently.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
@@ -88,12 +88,12 @@ export default function Home() {
 
       <section className="mx-auto grid max-w-7xl gap-6 px-5 py-12 md:grid-cols-[1.2fr_0.8fr]">
         <article className="rounded-lg border border-ink/10 bg-white p-6 shadow-sm">
-          <h2 className="text-xl font-semibold text-ink">Engineering in clinical practice</h2>
+          <h2 className="text-xl font-semibold text-ink">Supporting teams and clinical sites</h2>
           <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/65">
-            At Carthera, I support clinical site activation, device training, and ongoing trial
-            procedures. Previously, I supported neurosurgical robotics at Renishaw Healthcare.
-            Across both roles, my work connects hands-on technical support with the needs of
-            surgical teams.
+            At Carthera, I have activated 20+ U.S. clinical sites and independently coordinate
+            nationwide support. My experience at Carthera and Renishaw Healthcare brings together
+            clinical team training, technical issue resolution, and collaboration with clinical,
+            R&amp;D, and quality teams.
           </p>
         </article>
         <article className="rounded-lg border border-ink/10 bg-white p-6 shadow-sm">

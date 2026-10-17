@@ -5,7 +5,7 @@ import { siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
   title: "Contact",
-  description: "Contact Matthew Schuppel about biomedical engineering, clinical applications, and medical device support opportunities."
+  description: "Contact Matthew Schuppel about clinical operations, team development, biomedical engineering, and medical device support opportunities."
 };
 
 export default function ContactPage() {
@@ -15,8 +15,8 @@ export default function ContactPage() {
         <section className="surface rounded-lg p-6">
           <h2 className="text-xl font-semibold text-ink">Reach out</h2>
           <p className="mt-3 text-sm leading-6 text-ink/62">
-            Get in touch about biomedical engineering, clinical applications, or medical device
-            support opportunities. Use the form to open a draft in your email app.
+            Get in touch about clinical operations, team development, or medical device support
+            opportunities. Use the form to open a draft in your email app.
           </p>
           <div className="mt-6 space-y-4 text-ink/70">
             <p className="flex items-center gap-3">

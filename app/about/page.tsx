@@ -6,7 +6,7 @@ import { siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
   title: "About",
-  description: "Meet Matthew Schuppel, a Dallas-based biomedical engineer with experience at Carthera and Renishaw Healthcare."
+  description: "Meet Matthew Schuppel, a Dallas-based biomedical engineer focused on clinical operations, employee onboarding, team training, and project ownership."
 };
 
 const interests = [
@@ -18,31 +18,33 @@ const interests = [
 
 export default function AboutPage() {
   return (
-    <PageShell eyebrow="About" title="Biomedical engineering in clinical practice.">
+    <PageShell eyebrow="About" title="Helping teams and clinical sites succeed.">
       <div className="grid items-start gap-8 lg:grid-cols-[1.4fr_0.8fr]">
         <section className="surface rounded-lg p-6">
           <h2 className="text-xl font-semibold text-ink">{siteConfig.name}</h2>
           <p className="mt-3 text-sm font-semibold text-clay">{siteConfig.title}</p>
           <p className="mt-5 leading-7 text-ink/68">
-            I’m a biomedical engineer based in Dallas, Texas, and a Clinical Application Specialist
-            at Carthera. I support implantable neurosurgical devices in clinical trials, working
-            with neurosurgeons, nurses, oncologists, and site teams across the U.S.
+            I’m a biomedical engineer based in Dallas, Texas, with 4+ years of experience in
+            medical devices and clinical site operations. I have developed employee onboarding
+            plans and trained new team members and clinical staff at two companies.
           </p>
           <p className="mt-4 leading-7 text-ink/68">
-            At Carthera, I have activated and onboarded 20+ U.S. clinical sites. My work
-            spans device demonstrations, clinician training, implantation and activation support,
-            and ongoing technical troubleshooting.
+            As a Clinical Application Specialist at Carthera, I have activated and onboarded
+            20+ U.S. clinical sites. I coordinate nationwide support, lead device demonstrations
+            and clinician training, and maintain site relationships through ongoing procedures
+            and treatments.
           </p>
           <p className="mt-4 leading-7 text-ink/68">
-            Previously, I was a Clinical Support Engineer at Renishaw Healthcare, supporting
-            stereotactic neurosurgical robotics for sEEG, deep brain stimulation, and laser
-            interstitial thermal therapy. I installed systems, trained surgical teams, and
-            coordinated preventive maintenance and calibration.
+            Previously, at Renishaw Healthcare, I guided surgical teams through sEEG, deep brain
+            stimulation, and laser interstitial thermal therapy workflows. I coordinated robotic
+            system installations and preventive maintenance, delivered in-service training, and
+            supported customer evaluations and neurosurgical conferences.
           </p>
           <p className="mt-4 leading-7 text-ink/68">
-            I take ownership of field support and internal projects with minimal supervision,
-            while staying closely connected to clinical, R&amp;D, and quality teams. I earned my
-            B.S. in Biomedical Engineering from the University of Oklahoma in 2021.
+            I identify operational needs and take ownership of internal projects, from training
+            procedures to tools for onboarding, team coordination, and clinical trial logistics.
+            I work independently while partnering with clinical, R&amp;D, and quality teams.
+            I earned my B.S. in Biomedical Engineering from the University of Oklahoma in 2021.
           </p>
           <Link
             href="/resume"
