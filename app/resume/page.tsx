@@ -5,12 +5,12 @@ import { resume, siteConfig } from "@/data/site";
 
 export const metadata: Metadata = {
   title: "Resume",
-  description: "Matthew Schuppel’s experience in clinical operations, employee onboarding, peer training, project ownership, and nationwide medical device support."
+  description: "Matthew Schuppel’s leadership in clinical operations, nationwide medical device support, and relationship-driven medical device sales."
 };
 
 export default function ResumePage() {
   return (
-    <PageShell eyebrow="Resume" title="Clinical operations and team development.">
+    <PageShell eyebrow="Resume" title="Leadership, clinical support, and medical device sales.">
       <div className="grid gap-8 lg:grid-cols-[320px_1fr]">
         <aside className="space-y-4 lg:sticky lg:top-28 lg:self-start">
           <section className="surface rounded-lg p-6">
@@ -38,7 +38,7 @@ export default function ResumePage() {
           </section>
 
           <section className="surface rounded-lg p-6">
-            <h2 className="text-lg font-semibold text-ink">Leadership &amp; Operational Skills</h2>
+            <h2 className="text-lg font-semibold text-ink">Leadership, Support &amp; Sales Skills</h2>
             <div className="mt-4 space-y-5">
               {resume.skillGroups.map((group) => (
                 <div key={group.label}>

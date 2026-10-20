@@ -22,51 +22,59 @@ export const siteConfig = {
 };
 
 export const resume = {
-  "summary": "Biomedical engineer with 4+ years of experience in medical devices and clinical site operations. Developed employee onboarding plans and trained new team members and clinical staff at two companies. Experience includes activating 20+ U.S. clinical sites, independently coordinating nationwide support, and owning internal projects in collaboration with clinical, R&D, and quality teams.",
+  "summary": "Biomedical engineer with 4+ years of experience leading clinical site operations, training teams, and supporting medical devices nationwide. Developed onboarding plans, trained new colleagues, activated 20+ U.S. clinical sites, and owned projects that improve team and site consistency. Hands-on experience includes neurosurgical robotics, operating room support, device demonstrations, troubleshooting, preventive maintenance, and calibration. At Renishaw, built physician relationships that generated and closed sales, supported prospect meetings and product trials, and represented the company at 10+ conferences.",
   "highlights": [
-    "Developed employee onboarding plans and trained new team members and clinical staff at two companies.",
-    "Activated and onboarded 20+ U.S. clinical sites, coordinating training and ongoing site relationships.",
-    "Independently coordinate nationwide field support, prioritizing site needs with minimal supervision.",
-    "Take ownership of internal projects, training procedures, and tools in collaboration with clinical, R&D, and quality teams."
+    "Developed onboarding plans and trained new team members and backup staff at both Carthera and Renishaw.",
+    "Activated 20+ U.S. clinical sites and led internal projects, training procedures, and team tools to improve coordination.",
+    "Provided nationwide clinical and technical support for implantable and robotic neurosurgical devices, including operating room workflows and troubleshooting.",
+    "Generated and closed sales through physician relationships at Renishaw; supported prospect meetings, product trials, and customer evaluations."
   ],
   "experience": [
     {
       "role": "Clinical Application Specialist",
       "company": "Carthera Inc.",
       "years": "Apr 2024 – Present",
-      "description": "Clinical site operations, training leadership, and ownership of internal projects supporting nationwide clinical trials.",
+      "description": "Clinical site leadership, physician training, and nationwide device support for neurosurgical clinical trials.",
       "bullets": [
-        "Activated and onboarded 20+ U.S. clinical sites, coordinating initial training and maintaining site relationships through ongoing procedures and treatments.",
-        "Independently coordinate nationwide on-site and remote support, prioritizing site needs and resolving technical issues with minimal supervision.",
-        "Identify operational needs and take ownership of internal projects; created training procedures and tools to support site onboarding, team coordination, and clinical trial logistics.",
-        "Lead device demonstrations and training for neurosurgeons, nurses, oncologists, and other clinical staff, providing guidance during implantations and activations.",
-        "Partner with R&D on device development and quality assurance on complaints and technical follow-up. Maintain training records and technical documentation to support consistent site practices."
+        "Developed and implemented an onboarding plan for two new team members and backup staff, building training materials that support consistent field coverage.",
+        "Independently identified operational needs and owned projects including training procedures, team organization tools, and an app prototype to support clinical needs.",
+        "Activated and onboarded 20+ U.S. clinical trial sites, coordinating initial training and maintaining relationships through ongoing procedures and treatments.",
+        "Delivered routine and technically complex device demonstrations and training for investigators, neurosurgeons, nurses, and oncologists; guided clinical teams during implantations and activations.",
+        "Coordinated nationwide on-site and remote support, resolved technical questions, and prioritized site needs with minimal supervision.",
+        "Partnered with clinical, R&D, and quality teams on device development, complaints, and technical follow-up; maintained training records and documentation."
       ]
     },
     {
       "role": "Clinical Support Engineer",
       "company": "Renishaw Healthcare Inc.",
       "years": "Feb 2022 – Apr 2024",
-      "description": "Clinical team guidance, robotic system installations, training, and maintenance coordination for neurosurgical technology.",
+      "description": "Clinical team training, technical support, and relationship-driven sales for neurosurgical robotic systems.",
       "bullets": [
-        "Provided on-site and remote guidance to surgical teams, with weekly travel supporting sEEG, deep brain stimulation (DBS), and laser interstitial thermal therapy (LITT) workflows.",
-        "Coordinated robotic system installations and delivered in-service training, preparing clinical teams to operate and care for stereotactic neurosurgical technology.",
-        "Coordinated preventive maintenance across the installed base and resolved hardware and software issues; documented service activities and corrective actions for quality management.",
-        "Assessed clinical needs and conducted device demonstrations and customer evaluations to support sales opportunities. Represented the company as a technical resource at neurosurgical conferences."
+        "Trained two new team members and backup staff using a role-specific onboarding plan; coordinated robotic system installations and in-service training for clinical teams.",
+        "Provided on-site and remote support for stereotactic neurosurgical robotics in operating rooms, including sEEG, DBS, and LITT workflows, with weekly travel to customer sites.",
+        "Resolved hardware and software issues and coordinated preventive maintenance using metrology and calibration practices; documented service and corrective actions.",
+        "Generated and closed sales by developing physician relationships through ongoing clinical and technical support.",
+        "Supported prospect meetings and product trials, assessed site needs, and guided customer evaluations with technical demonstrations.",
+        "Represented Renishaw at 10+ conferences, demonstrating products and answering technical questions for prospective customers."
       ]
     }
   ],
   "skills": [
     "Employee onboarding",
     "Peer training",
-    "Cross-training",
     "Project ownership",
-    "Cross-functional coordination",
     "Clinical site activation",
+    "Cross-functional coordination",
+    "Operating room support",
     "Nationwide field support",
-    "Training procedures",
-    "Internal tool development",
-    "Technical issue resolution"
+    "Hardware and software troubleshooting",
+    "Preventive maintenance",
+    "Metrology and calibration",
+    "Physician relationships",
+    "Prospect meetings",
+    "Product trials",
+    "Customer evaluations",
+    "Technical demonstrations"
   ],
   "education": [
     {
@@ -77,23 +85,33 @@ export const resume = {
   ],
   "skillGroups": [
     {
-      "label": "Leadership",
+      "label": "Leadership & Operations",
       "skills": [
         "Employee onboarding",
         "Peer training",
-        "Cross-training",
         "Project ownership",
+        "Clinical site activation",
         "Cross-functional coordination"
       ]
     },
     {
-      "label": "Operations",
+      "label": "Clinical & Technical Support",
       "skills": [
-        "Clinical site activation",
+        "Operating room support",
         "Nationwide field support",
-        "Training procedures",
-        "Internal tool development",
-        "Technical issue resolution"
+        "Hardware and software troubleshooting",
+        "Preventive maintenance",
+        "Metrology and calibration"
+      ]
+    },
+    {
+      "label": "Sales & Relationships",
+      "skills": [
+        "Physician relationships",
+        "Prospect meetings",
+        "Product trials",
+        "Customer evaluations",
+        "Technical demonstrations"
       ]
     }
   ]
