@@ -26,6 +26,7 @@ export function Footer() {
         </nav>
         <div className="space-y-2 text-paper/70 lg:text-right">
           <a href={`mailto:${siteConfig.email}`} className="block hover:text-paper">{siteConfig.email}</a>
+          <a href={siteConfig.linkedinUrl} target="_blank" rel="noopener noreferrer" className="block hover:text-paper">LinkedIn</a>
           <p>{siteConfig.domain}</p>
           <p>© {new Date().getFullYear()} All rights reserved.</p>
         </div>

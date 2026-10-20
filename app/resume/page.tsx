@@ -21,11 +21,11 @@ export default function ResumePage() {
             <div className="mt-5 grid gap-3">
               <a
                 href={siteConfig.resumeUrl}
-                download="Matthew-Schuppel-Resume.pdf"
+                download="Matthew-Schuppel-Master-Technical-Resume.pdf"
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-ink px-4 py-3 text-sm font-semibold text-paper hover:-translate-y-0.5 hover:bg-moss"
               >
                 <Download size={16} aria-hidden="true" />
-                Download PDF
+                Download Technical Resume
               </a>
               <a
                 href={`mailto:${siteConfig.email}`}

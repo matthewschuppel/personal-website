@@ -21,9 +21,9 @@ export const metadata: Metadata = {
     siteName: siteConfig.name,
     images: [
       {
-        url: "/images/matthew-portrait.jpg",
-        width: 1600,
-        height: 2132,
+        url: "/images/matthew-headshot.jpg",
+        width: 2946,
+        height: 3928,
         alt: "Matthew Schuppel"
       }
     ],
@@ -34,7 +34,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: siteConfig.name,
     description: siteConfig.summary,
-    images: ["/images/matthew-portrait.jpg"]
+    images: ["/images/matthew-headshot.jpg"]
   }
 };
 

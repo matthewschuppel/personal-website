@@ -7,6 +7,7 @@ export const siteConfig = {
   "domain": "matthewschuppel.com",
   "summary": "Biomedical engineer with 4+ years of experience in clinical operations, employee onboarding, team training, and nationwide medical device support.",
   "availability": "Available for up to 100% travel. Open to select relocation opportunities.",
+  "linkedinUrl": "https://linkedin.com/in/matthewschuppel",
   "resumeUrl": "/Matthew-Schuppel-Resume.pdf",
   "socials": [
     {
@@ -14,7 +15,7 @@ export const siteConfig = {
       "href": "https://linkedin.com/in/matthewschuppel"
     },
     {
-      "label": "Resume PDF",
+      "label": "Master Technical Resume (PDF)",
       "href": "/Matthew-Schuppel-Resume.pdf"
     }
   ]

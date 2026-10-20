@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, LockKeyhole, Mail } from "lucide-react";
+import { ArrowRight, Linkedin, LockKeyhole, Mail } from "lucide-react";
 import { siteConfig } from "@/data/site";
 
 const interests = ["Biomedical technology", "Photography", "Travel", "Home systems", "Useful AI tools"];
@@ -50,6 +50,15 @@ export default function Home() {
               <Mail size={16} aria-hidden="true" />
               Contact
             </Link>
+            <a
+              href={siteConfig.linkedinUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white px-5 py-3 text-sm font-semibold text-ink hover:-translate-y-0.5 hover:bg-mist"
+            >
+              <Linkedin size={16} aria-hidden="true" />
+              LinkedIn
+            </a>
             <Link
               href="/dashboard"
               className="inline-flex items-center gap-2 rounded-md border border-ink/10 bg-white/70 px-5 py-3 text-sm font-semibold text-ink/75 hover:-translate-y-0.5 hover:bg-white"
@@ -64,7 +73,7 @@ export default function Home() {
           <div className="absolute -inset-4 rounded-lg bg-mist" aria-hidden="true" />
           <div className="relative overflow-hidden rounded-lg border border-ink/10 bg-white shadow-crisp">
             <Image
-              src="/images/matthew-portrait.jpg"
+              src="/images/matthew-headshot.jpg"
               alt="Matthew Schuppel"
               width={900}
               height={1200}
