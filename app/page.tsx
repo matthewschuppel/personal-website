@@ -3,12 +3,12 @@ import Link from "next/link";
 import { ArrowRight, Linkedin, LockKeyhole, Mail } from "lucide-react";
 import { siteConfig } from "@/data/site";
 
-const interests = ["Biomedical technology", "Photography", "Travel", "Home systems", "Useful AI tools"];
+const interests = ["Biomedical technology", "Travel", "Photography", "Computer Hardware", "Building Innovative Solutions"];
 
 const focusAreas = [
   {
-    title: "Onboarding & team training",
-    text: "Developed employee onboarding plans and trained new team members and clinical staff at two companies."
+    title: "Medical device technical support",
+    text: "Supported implantable and robotic neurosurgical devices in clinical trials and operating rooms."
   },
   {
     title: "Clinical site activation",
