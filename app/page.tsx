@@ -32,8 +32,9 @@ export default function Home() {
           <p className="mt-5 max-w-2xl text-2xl leading-9 text-ink/70">{siteConfig.title}</p>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/68">
             I’m a biomedical engineer with 4+ years of experience in medical devices and
-            clinical site operations. I develop onboarding plans, train teams, and take ownership
-            of the projects and support that help clinical sites operate consistently.
+            clinical site operations. I provide technical support, train physicians and new team
+            members, and take ownership of the projects that help my team and clinical sites
+            operate consistently.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link
