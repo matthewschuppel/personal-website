@@ -41,6 +41,12 @@ export default function AboutPage() {
             supported customer evaluations and neurosurgical conferences.
           </p>
           <p className="mt-4 leading-7 text-ink/68">
+            That technical work also supported sales. At Renishaw, I developed physician
+            relationships that generated and closed sales, helped prospective customers
+            evaluate products through meetings and trials, and represented the company at
+            10+ conferences.
+          </p>
+          <p className="mt-4 leading-7 text-ink/68">
             I identify operational needs and take ownership of internal projects, from training
             procedures to tools for onboarding, team coordination, and clinical trial logistics.
             I work independently while partnering with clinical, R&amp;D, and quality teams.

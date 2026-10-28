@@ -17,6 +17,10 @@ const focusAreas = [
   {
     title: "Project ownership",
     text: "Identify operational needs and create training procedures and internal tools for team coordination and clinical trial logistics."
+  },
+  {
+    title: "Technical sales and physician relationships",
+    text: "Built physician relationships that generated and closed sales at Renishaw; supported prospect meetings, product trials, and customer evaluations."
   }
 ];
 
@@ -86,7 +90,7 @@ export default function Home() {
       </section>
 
       <section className="border-y border-ink/10 bg-white/55">
-        <div className="mx-auto grid max-w-7xl gap-4 px-5 py-10 md:grid-cols-3">
+        <div className="mx-auto grid max-w-7xl gap-4 px-5 py-10 md:grid-cols-2 xl:grid-cols-4">
           {focusAreas.map((area) => (
             <article key={area.title} className="rounded-lg border border-ink/10 bg-paper p-5 shadow-sm hover:-translate-y-0.5 hover:shadow-crisp">
               <h2 className="font-semibold text-ink">{area.title}</h2>
