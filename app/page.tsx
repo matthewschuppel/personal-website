@@ -33,7 +33,7 @@ export default function Home() {
           <h1 className="mt-5 max-w-4xl text-5xl font-semibold tracking-tight text-ink sm:text-7xl">
             {siteConfig.name}
           </h1>
-          <p className="mt-5 max-w-2xl text-2xl leading-9 text-ink/70">{siteConfig.title}</p>
+          <p className="mt-5 max-w-2xl text-2xl leading-9 text-ink/70">Biomedical Engineer and Clinical Applications</p>
           <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/68">
             I’m a biomedical engineer with 4+ years of experience in medical devices and
             clinical site operations. I provide technical support, train physicians and new team
